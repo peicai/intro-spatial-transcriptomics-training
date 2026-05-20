@@ -36,6 +36,8 @@ library(scuttle)
 library(scater)
 library(Voyager)
 library(patchwork)
+library(HDF5Array)
+
 ```
 
 ## Load the Xenium object
@@ -43,7 +45,7 @@ library(patchwork)
 We start with the Xenium object saved at the end of Exercise 1B.
 
 ```{r}
-sfe <- readRDS("results/day1/01.1b_sfe_p2.rds")
+sfe <- loadHDF5SummarizedExperiment(dir = "results/day1", prefix = "01.1b_sfe_")
 sfe
 ```
 

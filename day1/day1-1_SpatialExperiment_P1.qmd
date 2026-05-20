@@ -322,7 +322,7 @@ Save the filtered `SpatialExperiment` object for the next steps:
 ```{r day1-1-SpatialExperiment-20 }
 dir.create("results/day1", showWarnings = FALSE, recursive = TRUE)
 saveHDF5SummarizedExperiment(spe,
-  dir = "results/day1", prefix = "01.1_spe_P1", replace = TRUE,
+  dir = "results/day1", prefix = "01.1_spe_P1_", replace = TRUE,
   chunkdim = NULL, level = NULL, as.sparse = NA,
   verbose = NA
 )
