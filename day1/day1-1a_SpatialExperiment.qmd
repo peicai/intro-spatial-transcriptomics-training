@@ -53,28 +53,9 @@ library(HDF5Array)
 
 ## Data for the course
 
-We will work with the **Visium HD, sample P2 CRC** dataset from the human colorectal cancer study by Oliveira _et al._ The public 10x Genomics page also provides a matching Xenium dataset from a serial section of the same sample, which we will use in `Exercise 1 B`.
+We will work on a **Visium HD** dataset from a human colorectal cancer study by [Oliveira _et al_](https://www.nature.com/articles/s41588-025-02193-3). The dataset contains normal adjacent tissue (NAT) and colorectal carcinoma (CRC) from 5 patients.
 
-The full Visium HD output is very large. For the practical course, we use a compact course data folder that contains the required 10x output files.
-
-The subset is chosen for two reasons:
-
--   it keeps the object small enough for interactive work during the course;
--   it retains a real tissue region that can be compared approximately with the Xenium P2 CRC serial section.
-
-OSTA uses the following P2 Visium HD region for detailed visualization:
-
-```{r day1-1a-SpatialExperiment-3}
-osta_roi_visium <- c(
-  xmin = 54000,
-  xmax = 58000,
-  ymin = 12000,
-  ymax = 16000
-)
-osta_roi_visium
-```
-
-For the course object, we use a nearby larger region:
+We will focus on a Visium HD slide from one patient (called "P2CRC"), available from the [10X website](https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-libraries-of-human-crc). We will focus on the "binned output" available as an output of the Space Ranger pipeline (version 3.0). The full output is very large, so for practical reasons we use a region of interest, selected to include an interesting part of the tissue.:
 
 ```{r day1-1a-SpatialExperiment-4}
 roi_visium <- c(
@@ -86,9 +67,20 @@ roi_visium <- c(
 roi_visium
 ```
 
-The exact OSTA region is useful for visualization, but in this run it contains about 4,700 16 um bins. For the practical course we use a larger nearby region that still contains a clear spatial marker pattern, for example `PIGR`.
+*Note 1*: the [OSTA book](https://lmweber.org/OSTA/) uses the following (smaller) region of interest from the same slide:
 
-The coordinates are in the native Visium HD image coordinate system returned by `spatialCoords()`.
+```{r day1-1a-SpatialExperiment-3}
+osta_roi_visium <- c(
+  xmin = 54000,
+  xmax = 58000,
+  ymin = 12000,
+  ymax = 16000
+)
+osta_roi_visium
+```
+
+*Note 2*: The same study also generated a matching Xenium dataset from serial sections of the same samples, which we will use in `Exercise 1 B` (we subsetted to regions of interest of the P2CRC slide, approximately matching the one selected here).
+
 
 ```{r day1-1a-SpatialExperiment-5}
 options(timeout = 600)
@@ -112,7 +104,8 @@ if (!dir.exists("data/Human_Colon_Cancer_P2/")) {
 }
 ```
 
-We will import the 16 um binned Visium HD output into a `SpatialExperiment` object and then subset it to the course region:
+We will import the 16 um binned Visium HD output into a `SpatialExperiment` object and then subset it to the course region. The coordinates are in the native Visium HD image coordinate system returned by `spatialCoords()`.
+
 
 ```{r day1-1a-SpatialExperiment-6}
 spe <- TENxVisiumHD(
@@ -140,12 +133,12 @@ spe
 ::: callout-important
 ## Exercise 1
 
-Have a look at the paper and the 10x Genomics website.
+Have a look at the paper and the 10X Genomics website.
 
 -   How are transcript molecules measured in Visium HD?
 -   What does the 16 um binned output represent?
--   Why might we use 16 um bins for a course exercise instead of the smallest 2 um bins?
--   Which Space Ranger report can you inspect to get an overview of sample and processing quality?
+-   Why might it be a good idea to use 16 um bins instead of the smallest 2 um bins? What might be the issues?
+-   Which report from the Space Ranger tool can you inspect to get an overview of sample and processing quality?
 :::
 
 ::: {.callout-tip collapse="true"}
@@ -153,16 +146,19 @@ Have a look at the paper and the 10x Genomics website.
 
 The measurements of RNA molecules are indirect: targeted probe pairs are hybridized, ligated, captured on the Visium HD slide, and sequenced. The binned Visium HD outputs aggregate molecules over square spatial bins.
 
-The smallest Visium HD binned output is 2 um. Larger bins pool neighboring 2 um bins: an 8 um bin aggregates 16 smaller bins, and a 16 um bin aggregates 64 smaller bins. This increases counts per observation and reduces sparsity at the cost of spatial resolution.
+The smallest Visium HD bins are 2x2 um. Larger bins are pools of neighboring 2 um bins: an 8 um bin aggregates 16 smaller bins, and a 16 um bin aggregates 64 smaller bins. This increases the number of UMIs per gene and per bin and reduces the sparsity of the data. This is of course at the cost of spatial resolution, and it should be kept in mind that a 16 um may captures material from multiple cells. For this course, 16 um bins are a practical compromise. They make the object smaller and faster to plot and process while still preserving tissue-level spatial structure. 
 
-For this course, 16 um bins are a practical compromise. They make the object smaller and faster to plot and process while still preserving tissue-level spatial structure. The Space Ranger web summary and metrics summary are useful reports for checking processing quality before using the sample in the course.
+The [Space Ranger web summary](https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-libraries-of-human-crc) and metrics summary are useful reports for checking processing quality before using the sample in the course.
 :::
 
 ## Exploring the object
 
-In this exercise, we will inspect a `SpatialExperiment` object. `SpatialExperiment` extends `SingleCellExperiment`, so familiar accessors such as `colData()`, `rowData()`, `assay()`, and `reducedDims()` still apply.
+In this exercise, we will inspect the `SpatialExperiment` class used to store the data. `SpatialExperiment` extends `SingleCellExperiment`, classically used for scRNA-seq analysis, so familiar accessors such as `colData()`, `rowData()`, `assay()`, and `reducedDims()` still apply.
 
 ![Overview of the `SpatialExperiment` class structure](../assets/images/spe.png)
+
+*Note*: The practical `Exercise 1 B` uses a Xenium dataset stored into a `SpatialFeatureExperiment` class, which is an extension of the `SpatialExperiment` incorporating geometries, allowing to store cell segmentation polygons for example.
+
 
 ::: callout-important
 ## Exercise 2
@@ -185,6 +181,7 @@ Questions:
 -   What kind of data is stored in each slot?
 -   How many bins and genes are retained in the subsetted `spe` object?
 -   Are all retained bins within the tissue area?
+-   Bonus: what class is used to store the UMI count matrix? What is special about it?
 :::
 
 ::: {.callout-tip collapse="true"}
@@ -217,7 +214,10 @@ The assay stores the count matrix:
 
 ```{r day1-1a-SpatialExperiment-10}
 assay(spe)
+class(assay(spe))
 ```
+
+The `DelayedArray` class allows to store out-of-memory representations of count matrices, which are saved as .h5 files on the disk. This is very useful for efficient processing of large datasets (100,000s of cells or spots)
 
 The `reducedDims` slot is empty at this stage:
 
@@ -267,7 +267,7 @@ Why do we see only a specific region of the slide?
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-The full Visium HD output is much larger than needed for this introductory exercise. At the start of this exercise, we subsetted the imported object to one representative tissue region so that it remains fast to plot and process. This same region is also used as the anchor for selecting a comparable Xenium region in Exercise `1 B`.
+The full Visium HD output is much larger than needed for this introductory exercise. At the start of this exercise, we subsetted the object to one representative tissue region so that it remains fast to plot and process. This same region is also used as the anchor for selecting a comparable Xenium region in `Exercise 1 B`.
 :::
 
 It is possible to colour bins according to a gene or a column in `colData`, for example `PIGR`:
@@ -298,13 +298,12 @@ In which slot is `array_row` stored, and what does it represent?
 The column `array_row` is stored in `colData`. It represents the row position of each bin in the Visium HD grid, so the plot shows a smooth coordinate gradient across the selected region. This is technical spatial metadata, not a gene expression pattern.
 
 ```{r day1-1a-SpatialExperiment-18}
-p <- plotVisium(
+plotVisium(
   spe,
   annotate = "array_row",
   zoom = TRUE,
   point_shape = 22
 )
-p
 ```
 :::
 
@@ -335,7 +334,7 @@ The prepared object is expected to contain only bins from a tissue-covered regio
 
 ## Save the object
 
-Save the filtered `SpatialExperiment` object for the next steps:
+We save the filtered `SpatialExperiment` object for the next steps. Remember that the count matrix is stored as an out-of-memory `DelayedArray` object, so the object cannot be saved with the usual `saveRDS` command. 
 
 ```{r day1-1a-SpatialExperiment-21}
 dir.create("results/day1", showWarnings = FALSE, recursive = TRUE)
