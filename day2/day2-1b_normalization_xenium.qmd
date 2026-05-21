@@ -45,7 +45,7 @@ library(HDF5Array)
 We start with the Xenium object saved at the end of Exercise 1B.
 
 ```{r}
-sfe <- loadHDF5SummarizedExperiment(dir = "results/day1", prefix = "01.1b_sfe_xenium")
+sfe <- loadHDF5SummarizedExperiment(dir = "results/day1", prefix = "01.1b_sfe_xenium_")
 sfe
 ```
 

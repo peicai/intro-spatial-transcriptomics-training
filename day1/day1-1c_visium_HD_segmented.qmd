@@ -13,7 +13,7 @@ execute:
 By the end of this exercise, you will be able to:
 
 -  TO DEFINE
-<!-- Adapt depending on the final data structure -->
+<!-- TO DO: Adapt depending on the final data structure -->
 
 
 ## Libraries
@@ -36,8 +36,7 @@ library(VisiumIO)
 
 Finally, we will work with the **Visium HD segmented output**. This data corresponds to the same sample and region of interest as the binned data from `Exercise 1A`, but instead of being binned, it contains the output of cell segmentation. Since Space Ranger version 4.0, the output of cell segmentation is available as an optional output of the pipeline, and it contains the coordinates of the segmented cells and their boundaries.
 
-<!-- Download the segmented output from the 10X website if it does not exist in the `data` folder. -->
-
+<!-- TO DO: we need to make a smaller version of teh dataset for the course! -->
 
 ```{r day1-1c-visium_HD_segmented-3}
 options(timeout = 600)
@@ -63,20 +62,20 @@ if (!dir.exists("data/Visium_HD_Human_Colon_Cancer_segmented_outputs/")) {
 
 ::: callout-important
 ## Exercise 1
-Why will we use SpatialFeatureExperiment to work with the segmented data instead of SpatialExperiment as we did for the binned data in Exercise 1A
-?
+Which class do you think should be used to store the Visium HD segmented data? `SpatialExperiment` as we used in Exercise 1A
+or `SpatialFeatureExperiment` as we used in Exercise 1B?
 ::: 
 
 ::: {.callout-tip collapse="true"}
 ## Answer
-Since segmeneted data contains cell boundaries, the coordinates of the segmented cells are not limited to the spot coordinates as in the binned data. Therefore, we will use `SpatialFeatureExperiment` to work with the segmented data, as it allows us to store and visualize spatial features such as cell boundaries, as we did for the Xenium data in Exercise 1B. 
+Since segmented data contains cell boundaries, the coordinates of the segmented cells are not limited to the spot coordinates as in the binned data. Therefore, we will use `SpatialFeatureExperiment` to work with the segmented data, as it allows us to store and visualize spatial features such as cell boundaries, as we did for the Xenium data in Exercise 1B. 
 In contrast, `SpatialExperiment` is more suitable for binned data where the coordinates correspond to the spot centroids and there are no additional spatial features to store.
 ::: 
 
 
-We will create the `SpatialFeatureExperiment` object in two steps.
-
-We start reading the object into a `SpatialExperiment` object and subset it to the course region, as we have done for visium HD binned data in the previous exercises.
+Here we will proceed in two steps:
+- We start reading the object into a `SpatialExperiment` object and subset it to the region of interest, as we have done for Visium HD binned data in the previous exercises. This allows a quick comparison of the two types of processing for the same slide
+- We then convert the object to create a `SpatialFeatureExperiment` object and add the cell segmentation information to it/
 
 
 ```{r day1-1c-visium_HD_segmented-4}

@@ -53,10 +53,9 @@ library(HDF5Array)
 
 ## Data for the course
 
-We will work on a human colorectal cancer study by [Oliveira _et al_](https://www.nature.com/articles/s41588-025-02193-3). The dataset contains normal adjacent tissue (NAT) and colorectal carcinoma (CRC) from 5 patients.
+We will work on a human colorectal cancer study by [Oliveira _et al_](https://www.nature.com/articles/s41588-025-02193-3). The dataset contains normal adjacent tissue (NAT) and colorectal carcinoma (CRC) from 5 patients. We will focus on data from a patient called "P2", available from the [10X website](https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-libraries-of-human-crc). 
 
-We will focus on data from a patient called "P2", available from the [10X website](https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-libraries-of-human-crc). 
-For this sample, the study provides Visium HD data at 2, 8, and 16 um binned resolutions and output from cell segmentation, as well as a matching Xenium dataset. The data were generated from serial sections of the same samples, so they are spatially matched and can be used for cross-platform comparisons.
+For this sample, the study provides Visium HD data at 2, 8, and 16 um resolution and the per-cell output after cell segmentation. Matching Xenium data generated from serial sections of the same sample is also available and can be used for cross-platform comparisons.
 
 In this exercise we will work with **Visium HD** data and focus on the "binned output" available as an output of the Space Ranger pipeline (version 3.0). The full output is very large, so for practical reasons we use a region of interest, selected to include an interesting part of the tissue, because it contains gland-like epithelial structures together with stromal or lower-density areas:
 
@@ -83,7 +82,7 @@ osta_roi_visium <- c(
 osta_roi_visium
 ```
 
-*Note 2*: The same study also generated a matching Xenium dataset from serial sections of the same samples, which we will use in `Exercise 1 B` (we subsetted to regions of interest of the P2CRC slide, approximately matching the one selected here).
+*Note 2*: In `Exercise 1B` we focus on the matching Xenium dataset from a serial section of the same P2CRC sample, subsetted to an approximately matching region of interest.
 
 
 ```{r day1-1a-SpatialExperiment-5}
@@ -108,7 +107,7 @@ if (!dir.exists("data/Human_Colon_Cancer_P2/")) {
 }
 ```
 
-We will import the 16 um binned Visium HD output into a `SpatialExperiment` object and then subset it to the course region. The coordinates are in the native Visium HD image coordinate system returned by `spatialCoords()`.
+We will import the 16 um binned Visium HD output into a `SpatialExperiment` object and then subset it to the region of internet. The coordinates are in the native Visium HD image coordinate system returned by `spatialCoords()`.
 
 ```{r day1-1a-SpatialExperiment-6}
 spe <- TENxVisiumHD(
@@ -160,7 +159,7 @@ In this exercise, we will inspect the `SpatialExperiment` class used to store th
 
 ![Overview of the `SpatialExperiment` class structure](../assets/images/spe.png)
 
-*Note*: The practical `Exercise 1 B` uses a Xenium dataset stored into a `SpatialFeatureExperiment` class, which is an extension of the `SpatialExperiment` incorporating geometries, allowing to store cell segmentation polygons for example.
+*Note*: The practical `Exercise 1B` uses a Xenium dataset stored into a `SpatialFeatureExperiment` class, which is an extension of the `SpatialExperiment` incorporating geometries, allowing to store cell segmentation polygons for example.
 
 
 ::: callout-important
@@ -220,7 +219,7 @@ assay(spe)
 class(assay(spe))
 ```
 
-The `DelayedArray` class allows to store out-of-memory representations of count matrices, which are saved as .h5 files on the disk. This is very useful for efficient processing of large datasets (100,000s of cells or spots)
+The `DelayedArray` class allows to store out-of-memory representations of count matrices, which are saved as `.h5` files on the disk. This is very useful for efficient processing of large datasets (100,000s of cells or spots)
 
 The `reducedDims` slot is empty at this stage:
 
@@ -270,7 +269,7 @@ Why do we see only a specific region of the slide?
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-The full Visium HD output is much larger than needed for this introductory exercise. At the start of this exercise, we subsetted the object to one representative tissue region so that it remains fast to plot and process. This same region is also used as the anchor for selecting a comparable Xenium region in `Exercise 1 B`.
+The full Visium HD output is much larger than needed for this introductory exercise. At the start of this exercise, we subsetted the object to one representative tissue region so that it remains fast to plot and process. This same region is also used as the anchor for selecting a comparable Xenium region in `Exercise 1B`.
 :::
 
 It is possible to colour bins according to a gene or a column in `colData`, for example `PIGR`. We renamed the rows to gene symbols after import, which is why we can refer to this marker as `"PIGR"` rather than by its Ensembl ID. At this stage we plot the number of UMIs since log-normalized counts will be introduced later in the course.
