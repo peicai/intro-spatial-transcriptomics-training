@@ -40,7 +40,7 @@ Next, will work with the **Xenium** dataset from the P2 sample (human colorectal
 
 This slide is a serial section of the sample used in `Exercise 1A`, so the two datasets are biologically related but not the exact same physical tissue section. 
 
-The full Xenium output is very large and includes cell boundaries, nucleus boundaries, transcript locations, morphology images, and expression matrices. For this exercise, for practical reasons we use a region of interest, selected to **approximately match the region of interest used in `Exercise 1A`**, and only include some of the layers in the imported compact course folder. This makes the two exercises comparable while avoiding a full image-registration workflow during the practical.
+The full Xenium output is very large and includes cell boundaries, nucleus boundaries, transcript locations, morphology images, and expression matrices. For this exercise, for practical reasons we use a region of interest, selected to **approximately match the region of interest used in `Exercise 1A`**, and only include some of the layers in the imported compact course folder. This makes the two exercises comparable while avoiding a full image-registration workflow during the practical (but see [this section from the OSTA book](https://lmweber.org/OSTA/pages/crs-workflow-xenvis.html#alignment) for some info on this process)
 
 
 ```{r day1-1b-SFE-2}
@@ -53,9 +53,7 @@ roi_xenium <- c(
 roi_xenium
 ```
 
-We import the Xenium output with `flip = "none"` so the exercise uses the native Xenium coordinate orientation. The same visual region may appear with negative y coordinates if the geometry has been flipped during import with morphology images. Because the compact course folder does not include morphology images, we use the positive y coordinates shown above.
-
-We import the compact Xenium output into a `SpatialFeatureExperiment` object:
+We import the Xenium output with `flip = "none"` so the exercise uses the native Xenium coordinate orientation. We will see below that this differs from the coordinate system used by the Visium HD platform, which can be accounted for at the import stage, or later for when visualizing the data, which is what we chose to do for this practical. We import the compact Xenium output into a `SpatialFeatureExperiment` object:
 
 ```{r day1-1b-SFE-4}
 sfe_full <- readXenium("data/Human_Colon_Cancer_P2/xenium/outs", flip = "none")
@@ -186,16 +184,28 @@ ggplot(xy, aes(x = x, y = y)) +
   labs(x = "x", y = "y")
 ```
 
+<!-- TO DO: ask to flip coordinates here? I'm rather only asking a question related to the coordinates below for now -->
+
 ::: callout-important
 ## Exercise 4
 
 Compare this point-based visualization with the Visium HD plot from `Exercise 1A`.
-
-What does one point represent in each dataset?
+- What do you notice regarding the coordinates ?
+- What does one point represent in each dataset?
 :::
 
 ::: {.callout-tip collapse="true"}
 ## Answer
+
+The coordinate system differences between Visium HD and Xenium results in flipped image. It's possible to simply correct this at the plotting step: 
+
+```{r day1-1b-SFE-10b}
+ggplot(xy, aes(x = -y, y = -x)) +
+  geom_point(size = 0.08, alpha = 0.4) +
+  coord_fixed() +
+  theme_bw() +
+  labs(x = "x", y = "y")
+```
 
 In the Visium HD exercise, each point or square represents a 16 um spatial bin. In the Xenium exercise, each point represents a segmented cell centroid. This is one of the key conceptual differences between binned sequencing-based spatial data and image-based cell-resolved spatial data.
 :::
@@ -218,11 +228,11 @@ How does the interpretation differ from plotting a gene on Visium HD bins? How d
 
 The Xenium signal is measured over segmented cells, while the Visium HD binned signal aggregates molecules within fixed spatial bins. Xenium can therefore represent cell-level heterogeneity more directly, but it measures a targeted panel rather than the whole transcriptome.
 
-Here is some code to plot the expression of the same gene across platforms in a similar way:
+Here is some code to plot the log of the molecule counts of the same gene across platforms in a comparable way:
 ```{r day1-1b-SFE-12}
 xy <- data.frame(spatialCoords(sfe), colData(sfe), PIGR=counts(sfe)["PIGR",] + 1)
 names(xy)[1:2] <- c("x", "y")
-ggplot(xy, aes(x = x, y = y, color=PIGR)) +
+p_xen <- ggplot(xy, aes(x = -y, y = x, color=PIGR)) +
   geom_point(size = 0.2) +
   coord_fixed() +
   scale_color_gradient(trans = "log", low = "white", high = "red") +
@@ -232,11 +242,13 @@ ggplot(xy, aes(x = x, y = y, color=PIGR)) +
 spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_spe_")
 xy <- data.frame(spatialCoords(spe), colData(spe), PIGR=counts(spe)["PIGR",] + 1)
 names(xy)[1:2] <- c("x", "y")
-ggplot(xy, aes(x = x, y = y, color=PIGR)) +
+p_vis <- ggplot(xy, aes(x = x, y = y, color=PIGR)) +
   geom_point(size = 1, shape=15) +
   coord_fixed() +
   scale_color_gradient(trans = "log", low = "white", high = "red") +
   theme_bw() 
+
+p_xen + p_vis
 ```
 :::
 

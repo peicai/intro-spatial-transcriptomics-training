@@ -62,10 +62,10 @@ In this exercise we will work with **Visium HD** data and focus on the "binned o
 
 ```{r day1-1a-SpatialExperiment-4}
 roi_visium <- c(
-  xmin = 50000,
+  xmin = 49000,
   xmax = 58000,
-  ymin = 14500,
-  ymax = 22000
+  ymin = 7500,
+  ymax = 16000
 )
 roi_visium
 ```
@@ -205,6 +205,8 @@ colData(spe) |>
   summarise(number = n())
 ```
 
+<!-- TO DO: This doesn't seem to work very well sincer some spots obviosuly are not in_tissue...-->
+
 The slot `rowData` contains gene metadata:
 
 ```{r day1-1a-SpatialExperiment-9}
@@ -254,7 +256,7 @@ To get a visual overview, we use `plotVisium()` function from the `ggspavis` pac
 plotVisium(spe, spots = FALSE)
 ```
 
-Then we overlay the 16 um bins:
+Then we overlay the 16 um bins to see which part of the tissue was covered by the array:
 
 ```{r day1-1a-SpatialExperiment-16}
 plotVisium(spe, point_shape = 22, point_size = 0.5)
@@ -316,27 +318,36 @@ plotVisium(
 
 Subset the `SpatialExperiment` object to retain only bins that are within the tissue area.
 
-How many bins were present in `spe`, and how many are left after selecting `in_tissue` bins only?
+How many bins were present in `spe`, and how many are left after selecting bins overlapping the tissue?
 :::
 
 ::: {.callout-tip collapse="true"}
 ## Answer
 
 ```{r day1-1a-SpatialExperiment-19}
-sub <- spe[, colData(spe)$in_tissue]
+table(colData(spe)$in_tissue) 
+## all spots, although it's clear that some do not overlap the tissue...
+
+## let's assume that the spots not overlapping the tissue will not collect many counts
+quantile(colSums(counts(spe)), prob=0.01)
+quantile(colSums(counts(spe)), prob=0.02)
+sub <- colSums(counts(spe)) > 50
+table(sub)
+
+plotVisium(
+  spe[, sub],
+  annotate = "array_row",
+  zoom = TRUE,
+  point_shape = 22
+)
 ```
 
-```{r day1-1a-SpatialExperiment-20}
-dim(spe)
-dim(sub)
-```
-
-The prepared object is expected to contain only bins from a tissue-covered region. If both dimensions are the same, filtering on `in_tissue` does not remove additional bins.
+Filtering on the library size thus seems to remove a few"empty" bins not overlapping the tissue. Let's keep this in mind for the Exercise 2 where we perform QC filtering!
 :::
 
 ## Save the object
 
-We save the filtered `SpatialExperiment` object for the next steps. Remember that the count matrix is stored as an out-of-memory `DelayedArray` object, so the object cannot be saved with the usual `saveRDS` command. 
+We save the filtered `SpatialExperiment` object for the next steps. Remember that the count matrix is stored as an out-of-memory `DelayedArray` object, so the object cannot be saved with the usual `saveRDS` command. The following command saves the assay matrices as `.h5` files along with the `SpatialExperiment` object as an `.rds` file.
 
 ```{r day1-1a-SpatialExperiment-21}
 dir.create("results/day1", showWarnings = FALSE, recursive = TRUE)

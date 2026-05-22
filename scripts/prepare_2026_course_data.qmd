@@ -341,9 +341,10 @@ p_visium
 
 ```{r overview-xenium}
 xy_xen <- as.data.frame(spatialCoords(sfe_xen))
-names(xy_xen)[1:2] <- c("x", "y")
+#names(xy_xen)[1:2] <- c("x", "y")
 
-p_xenium <- ggplot(xy_xen, aes(x = x, y = y)) +
+## We can plot the flipped cooridnates to match the Visium slide
+p_xenium <- ggplot(xy_xen, aes(x = -y_centroid, y = -x_centroid)) +
   geom_point(size = 0.05, alpha = 0.3) +
   coord_fixed() +
   theme_bw() +
@@ -358,7 +359,18 @@ ggsave(
 )
 
 p_xenium
+
+library(patchwork)
+p_visium + p_xenium
+
+## Plot the Xenium image
+## The image has 4 channels, which are DAPI, ATP1A1/CD45/E-Cadherin, 18S, and AlphaSMA/Vimentin, in this order
+## 3 channels have to be chosen to be plotted in the R, G, and B channels in this order.
+plotImage(sfe_xen, image_id = "morphology_focus", channel = 1:3, show_axes = TRUE,
+          dark = TRUE, normalize_channels = TRUE)
 ```
+After flipping coordinates and inverting x and y, we get matching pictures across datasets.
+
 
 ## Subset approximately matching regions
 
@@ -412,13 +424,58 @@ roi_xenium <- c(
   ymin = 2500,
   ymax = 4900
 )
-
 roi_visium
 roi_xenium
+
+## Inspect Xenium's ROI
+p_xen <- plotImage(sfe_xen, image_id = "morphology_focus", channel = 1:3, show_axes = TRUE,
+          dark = TRUE, normalize_channels = TRUE) +
+    geom_sf(data = st_as_sfc(st_bbox(roi_xenium)), fill = NA, color = "white", linewidth = 0.5)
+p_xen
+plotImage(sfe_xen, image_id = "morphology_focus", channel = 3:1,
+          bbox = roi_xenium, normalize_channels = TRUE)
+
+## Inspect Visium HD's ROI
+## We need to scale the coordinates using scaleFactors
+roi_visium_scaled <- roi_visium * scaleFactors(spe_hd)
+p_vis <- plotVisium(spe_hd, 
+                    zoom = TRUE, spots = FALSE) + 
+    geom_rect(
+        xmin=roi_visium_scaled["xmin"], xmax=roi_visium_scaled["xmax"], 
+        ymin=nrow(imgRaster(spe)) - roi_visium_scaled["ymin"], ymax=nrow(imgRaster(spe)) - roi_visium_scaled["ymax"], 
+        col="white", linewidth = 0.5, fill=NA)
+p_vis
+## Subset: 
+#p_vis_zoom <- plotVisium(spe, spots = FALSE, zoom = TRUE)
+#p_vis + p_vis_zoom
+
+## Compare Xenium 
+p_vis + p_xen
+
+## Indeed they do not match!
+## Adjust ROI for Visium:
+roi_visium_new <- c(
+  xmin = 49000,
+  xmax = 58000,
+  ymin = 7500,
+  ymax = 16000
+)
+roi_visium_scaled <- roi_visium_new * scaleFactors(spe_hd)
+p_vis_new <- plotVisium(spe_hd, 
+                    zoom = TRUE, spots = FALSE) + 
+    geom_rect(
+        xmin=roi_visium_scaled["xmin"], 
+        xmax=roi_visium_scaled["xmax"], 
+        ymin=nrow(imgRaster(spe_hd)) - roi_visium_scaled["ymin"], 
+        ymax=nrow(imgRaster(spe_hd)) - roi_visium_scaled["ymax"], 
+        col="white", linewidth = 0.5, fill=NA)
+p_vis + p_vis_new
+p_vis_new + p_xen
+## Much better!
 ```
 
 ```{r subset-objects}
-spe_hd_p2_crc_sub <- subset_by_roi(spe_hd, roi_visium)
+spe_hd_p2_crc_sub <- subset_by_roi(spe_hd, roi_visium_new)
 sfe_xen_p2_crc_sub <- subset_by_roi(sfe_xen, roi_xenium)
 
 dim(spe_hd)

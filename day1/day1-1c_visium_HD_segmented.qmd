@@ -28,10 +28,12 @@ library(arrow)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(patchwork)
 library(SpatialExperiment)
 library(SpatialFeatureExperiment)
 library(Voyager)
 library(VisiumIO)
+
 ```
 
 Finally, we will work with the **Visium HD segmented output**. This data corresponds to the same sample and region of interest as the binned data from `Exercise 1A`, but instead of being binned, it contains the output of cell segmentation. Since Space Ranger version 4.0, the output of cell segmentation is available as an optional output of the pipeline, and it contains the coordinates of the segmented cells and their boundaries.
@@ -95,15 +97,15 @@ rownames(spe_seg) <- uniquifyFeatureNames(
 spe_seg
 ```
 
-<!-- TO DO: import function to SFE in some package? Voyager package? -->
+<!-- TO DO: use import function directly to SFE? Is this available in some package? Voyager package? -->
 
 ```{r day1-1c-visium_HD_segmented-5}
 # Subset to the region of interest
 roi_visium <- c(
-  xmin = 50000,
+  xmin = 49000,
   xmax = 58000,
-  ymin = 14500,
-  ymax = 22000
+  ymin = 7500,
+  ymax = 16000
 )
 roi_visium
 
@@ -136,19 +138,20 @@ spe_seg
 plotVisium(spe, zoom=T)
 plotVisium(spe_seg, zoom=T)
 
-plotVisium(spe,
-  annotate = "PIGR",
-  assay = "counts",
-  zoom = TRUE,
-  point_size = 1,
-  point_shape = 22)
+p_vis <- plotVisium(spe,
+                    annotate = "PIGR",
+                    assay = "counts",
+                    zoom = TRUE,
+                    point_size = 1,
+                    point_shape = 22)
 
-plotVisium(spe_seg,
-  annotate = "PIGR",
-  assay = "counts",
-  zoom = TRUE,
-  point_size = 1,
-  point_shape = 21)
+p_vis_seg <- plotVisium(spe_seg,
+                      annotate = "PIGR",
+                      assay = "counts",
+                      zoom = TRUE,
+                      point_size = 1,
+                      point_shape = 21)
+p_vis + p_vis_seg
 ```
 
 Using visium HD segmented data allows us to have a more detailed view of the tissue, as we are not limited to the resolution of the bins. The x and y coordinates of the `SpatialExperiment` object corresponds to the centroids of the cells.
@@ -187,6 +190,7 @@ plot(st_geometry(colGeometries(sfe_seg)[["cellSeg"]]),
      col=rep(colors(), 2), 
      lty=0)
 
+## Plot the expression of PIGR on each segmented cell
 plotSpatialFeature(sfe_seg, 
                    colGeometryName="cellSeg", 
                    features="PIGR", 
