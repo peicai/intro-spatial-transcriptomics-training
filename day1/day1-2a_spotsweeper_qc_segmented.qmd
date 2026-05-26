@@ -67,7 +67,7 @@ is.mito <- rownames(sfe)[grepl("^MT-", rownames(sfe))]
 Need a solution or don't delete previous object 
 --->
 
-Now, we will calculate per-cell QC metrics using the `scrapper` package. The function `quickRnaQc.se` adds QC metrics, including mitochondrial gene percentage, to the `colData` of the `SpatialFeatureExperiment` object. Run the following code to compute these metrics and inspect the results:
+Now, we will calculate per-cell QC metrics using the `scrapper` package. The function `quickRnaQc.se` adds QC metrics, including mitochondrial gene percentage, to the `colData` of the `SpatialFeatureExperiment` object. Run the following code to compute these metrics:
 
 ```{r}
 sfe <- quickRnaQc.se(sfe, subsets = list(Mito = is.mito))
@@ -87,20 +87,20 @@ Check which metadata has been added to `colData`. Do you recognize the different
 colData(sfe)
 ```
 
-- The `sum` column contains the total number of unique molecular identifiers (UMIs) for each cell
+- The `sum` column contains the total number of unique molecular identifiers (UMIs) per cell
 - The `detected` column contains the number of unique genes detected per cell
 - The `subset.proportion.Mito` column contains the percentage of transcripts mapping to mitochondrial genes per cell
 :::
 
 ### Global outlier detection
 
-In order to detect low-quality cells and filter them out, QC methods adapted from scRNA-seq analysis can be applied. A simple option is to apply a fixed upper or lower threshold to a metric across all cells and remove the cells that do not pass the filtering criteria.
+In order to detect low-quality cells and filter them out, QC methods similar to those from scRNA-seq analysis can be applied. A simple approach is to apply a fixed upper or lower threshold to a metric across all cells and remove the cells that do not pass the filtering criteria.
 
-To set up these thresholds we can look for information from 10x Genomics and the community, for example https://github.com/10XGenomics/HumanColonCancer_VisiumHD/issues/28. Based on this discussion the authors of the OSTA book wrote (see "Remove bins overlaying empty tissue" section in https://lmweber.org/OSTA/pages/seq-workflow-visium-hd-bin.html#dependencies):
+To set up these thresholds and adapt them to this technology, we can look for information from 10x Genomics and the community, for example https://github.com/10XGenomics/HumanColonCancer_VisiumHD/issues/28. Based on this discussion the authors of the OSTA book wrote (see "Remove bins overlaying empty tissue" section in https://lmweber.org/OSTA/pages/seq-workflow-visium-hd-bin.html#dependencies):
 
 > Based on a discussion with the original author at 10x Genomics, in this dataset, 8 µm bins with a library size below 100 are removed. Since we expect a 4-fold increase in library size across all bins at 16 µm, we can set the filtering threshold to 400.
 
-We can also have a look and plot distributions of the values to decide which is the best cutoff:
+This is not exactly transposable to the segmented cell output, but conveys the message that the UMI counts are low, much lower than what is observed with scRNA-seq data! We can also have a look and plot distributions of the values to decide which is the best cutoff:
 
 ```{r}
 # Plot library size vs. detected genes
@@ -111,20 +111,20 @@ p1 <- ggcells(sfe, aes(x=detected, y=sum)) +
   scale_y_log10() +
   geom_xsidehistogram() + 
   geom_ysidehistogram() + 
-  geom_vline(xintercept = 300, col="red", lty=2) +
-  geom_hline(yintercept = 400, col="red", lty=2) +
+  geom_vline(xintercept = 200, col="red", lty=2) +
+  geom_hline(yintercept = 300, col="red", lty=2) +
   labs(y="Number of UMIs", x="Number of detected genes") +
   ggtitle("Library size vs. detected")
 
 # Plot mito proportion vs. detected genes
-p2 <- ggcells(sfe, aes(x=detected, y=subsets_Mito_percent)) + 
+p2 <- ggcells(sfe, aes(x=detected, y=subset.proportion.Mito*100)) + 
   geom_point() +
   geom_density_2d() +
   scale_x_log10() +
   geom_xsidehistogram() + 
   geom_ysidehistogram() + 
-  geom_vline(xintercept = 300, col="red", lty=2) +
-  geom_hline(yintercept = 20, col="red", lty=2) +
+  geom_vline(xintercept = 200, col="red", lty=2) +
+  geom_hline(yintercept = 10, col="red", lty=2) +
   labs(y="% mitochondrial reads", x="Number of detected genes") +
   ggtitle("Mito proportion vs. genes detected")
 
@@ -135,9 +135,9 @@ And further check how many cells would be removed with the given thresholds:
 
 ```{r}
 # Flag cells based on fixed thresholds
-sfe$qc_lib_size <- sfe$sum < 400
-sfe$qc_detected <- sfe$detected < 300
-sfe$qc_mito_prop <- sfe$subsets_Mito_percent > 20
+sfe$qc_lib_size <- sfe$sum < 300
+sfe$qc_detected <- sfe$detected < 200
+sfe$qc_mito_prop <- sfe$subset.proportion.Mito > 0.1
 
 # Tabulate number of cells flagged by each
 qc <- grep("^qc", names(colData(sfe)))
@@ -146,52 +146,66 @@ sapply(colData(sfe)[qc], table)
 
 ::: callout-important
 ## Exercise 2
-What do you think about this initial filtering?
+What do you think about this potential QC filtering?
 
-Have a look at the mitochondrial percentage values on the tissue section using `plotVisium()`. Which cells are more likely to be excluded?
+Have a look at the metrics on the tissue section using the plotting functions used in the previous practical, or with the `plotObsQC()` function from the `ggspavis` package. Where are the cells that would be excluded with such global cutoffs? 
+
+Try using more stringent cutoffs to see which cells would be excluded. What do you notice? What does it tell us retrospectively about the use of global cutoffs in the analysis of scRNA-seq data? 
 :::
 
 :::{.callout-tip collapse="true"}
 ### Answer
 
 ```{r}
-plotSpatialFeature(sfe, colGeometryName = "cellseg", features = "subsets_Mito_percent") +
-  plotSpatialFeature(sfe, colGeometryName = "cellseg", features = "sum") +
+## Plot the metrics
+p1 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "subset.proportion.Mito") +
+  theme(plot.title=element_text(hjust=0.5)) +
+  scale_fill_gradientn(colors=pals::jet())
+p2 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "sum") +
+  theme(plot.title=element_text(hjust=0.5)) +
+  scale_fill_gradientn(trans = "log", colors=pals::jet())
+p1 + p2
+  
+## Which cells would be excluded
+p1 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "qc_lib_size") +
+  theme(plot.title=element_text(hjust=0.5)) +
+  scale_fill_manual(values = c("beige", "red"))
+p2 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "qc_mito_prop") +
+  theme(plot.title=element_text(hjust=0.5)) +
+  scale_fill_manual(values = c("beige", "red"))
+p1 + p2
 
-plot_layout(nrow=1) &
-    theme(plot.title=element_text(hjust=0.5)) &
-    scale_fill_gradientn(NULL, colors=pals::jet())
-```
-:::
 
-### Visualize spatial pattern of QC metrics (Global outliers)
+## A similar plot using the ggspavis::plotVisium() function (y-coordinates are flipped!)
+p1 <- plotVisium(sfe, annotate = "sum", image = FALSE) +
+  theme(plot.title=element_text(hjust=0.5)) +
+  scale_fill_gradientn(colors=pals::jet())
+p2 <- plotVisium(sfe, annotate = "sum", image = FALSE) +
+  theme(plot.title=element_text(hjust=0.5)) +
+  scale_fill_gradientn(trans = "log", colors=pals::jet())
+p1 + p2
 
-Very importantly, we want to have a look into the spatial pattern of using a fixed threshold for QC metrics :
-
-```{r}
-# check spatial pattern of discarded cells
+## or with the ggspavis::plotObsQC() function
 p1 <- plotObsQC(sfe, 
                 plot_type="spot", annotate="qc_lib_size") + 
-  ggtitle("Library size (< 400 UMI)")
-
+  ggtitle("Library size (< 300 UMI)")
 p2 <- plotObsQC(sfe, 
-                plot_type="spot", annotate="qc_detected") + 
-  ggtitle("Detected genes (< 300 genes)")
-
-p3 <- plotObsQC(sfe, 
                 plot_type="spot", annotate="qc_mito_prop") + 
-  ggtitle("Mito proportion (> 20%)")
+  ggtitle("Mito proportion (> 10%)")
+p1 + p2
 
-# plot the three together
-gridExtra::grid.arrange(p1, p2, p3, ncol=2)
 ```
 
+Stringent cutoff lead to excluding cells in specific cellular structures, so quite likely excluding some specific cell types, which is not ideal. We have the opportunity to see that directly on the slide here, which is not the case when we analyze scRNA-seq data... There, a choice of a stringent cutoff can filter out entirely some cell types without us noticing!  
+
+
+:::
 
 ### Local Outlier Detection
 
 To avoid discarding whole layers of tissue, another approach to identify low-quality cells is to use local outlier detection methods that take into account the spatial context of each cell.
 
-`SpotSweeper` package provides functions to identify common QC metrics (such as the ones we have seen in the previous section: library size, number of detected genes, and mitochondrial percentage) and detect local outliers based on these metrics.
+The `SpotSweeper` package provides functions to identify local outliers based on common QC metrics (such as the ones we have seen in the previous section: library size, number of detected genes, and mitochondrial percentage).
 
 We will use `localOutliers` from `SpotSweeper`, which helps identify cells that deviate significantly from their local neighborhood.
 
@@ -216,7 +230,7 @@ sfe <- localOutliers(sfe,
 # Identify local outliers based on the mitochondrial gene percentage.
 # cells with an unusually high mitochondrial percentage will be flagged.
 sfe <- localOutliers(sfe,
-  metric = "subsets_Mito_percent",
+  metric = "subset.proportion.Mito",
   direction = "higher",
   log = FALSE
 )
@@ -225,16 +239,14 @@ sfe <- localOutliers(sfe,
 # A cell is considered a local outlier if it is flagged by any of the above metrics.
 sfe$local_outliers <- as.logical(sfe$sum_outliers) |
   as.logical(sfe$detected_outliers) |
-  as.logical(sfe$subsets_Mito_percent_outliers)
+  as.logical(sfe$subset.proportion.Mito_outliers)
 ```
 
 ::: callout-important
 ## Exercise 3
 How many cells were identified as local outliers based on the combined criteria?
 
-As we have seen before, visualizing the QC metrics is crucial for understanding the quality of your spatial transcriptomics data and for deciding on appropriate filtering strategies, so look at their spatial localization using the `plotObsQC` function.
-
-What do you think?
+As we have seen before, visualizing the QC metrics is crucial for understanding the quality of your spatial transcriptomics data and for deciding on appropriate filtering strategies, so look at their spatial localization using for example the `plotObsQC` function. What do you think?
 :::
 
 
@@ -249,16 +261,16 @@ plotObsQC(sfe,
   ggtitle("All local outliers")
 ```
 
-
-Even better, we can visualize the spatial distribution of the local outliers together with the QC metrics, for example plot the spatial distribution of local outliers for mitochondrial percentage.
+We can visualize the spatial distribution of the local outliers together with the QC metrics, for example plot the spatial distribution of local outliers for mitochondrial percentage.
 ```{r}
 plotQCmetrics(sfe,
-  metric = "subsets_Mito_percent", outliers = "subsets_Mito_percent_outliers",
-  point_size = 0.4,
-  stroke = 0.75
+  metric = "subset.proportion.Mito", outliers = "subset.proportion.Mito_outliers",
+  point_size = 1, stroke = 0.5
 ) +
   ggtitle("Local outliers for %MT")
 ```
+
+Overall we observe that very few outliers are detected. In regions where cells were spotted wiht global cutoffs, we notivce here that the cells that do not differ from their neighbourhood are not flagged anymore.
 :::
 
 ::: callout-important
@@ -272,55 +284,54 @@ Plot the spatial distribution of local outliers for library size and number of d
 ```{r}
 # Plot the spatial distribution of local outliers for library size.
 plotQCmetrics(sfe,
-  metric = "sum_log", outliers = "sum_outliers", point_size = 0.4,
-  stroke = 0.75
+  metric = "sum_log", outliers = "sum_outliers", 
+  point_size = 1, stroke = 0.5
 ) +
   ggtitle("Local outliers for number of UMIs")
-```
 
-```{r}
+
 # Plot the spatial distribution of local outliers for number of detected genes.
 plotQCmetrics(sfe,
   metric = "detected_log", outliers = "detected_outliers", point_size = 0.4,
   stroke = 0.75
 ) +
-  ggtitle("Local outliers for number of UMIs")
+  ggtitle("Local outliers for number of detected genes")
 ```
 
-Very few cells seem to be flagged as outliers!
+Very few cells seem to be flagged as outliers
 :::
 
 
 We can visualize the z-scores from the local outlier detection test and compare them to the global threshold used earlier. How do you interpret this?
+
 ```{r}
-plotObsQC(sfe, plot_type = "violin", x_metric = "subsets_Mito_percent_z", annotate = "qc_mito_prop")
+plotObsQC(sfe, plot_type = "violin", x_metric = "subset.proportion.Mito_z", annotate = "qc_mito_prop")
 ```
+
+:::{.callout-tip collapse="true"}
+### Answer
+We notice that some cells that were labeled as outliers based on a global cutoff are not outliers anymore relative to their local neighborhood, and conversely.
+
+:::
 
 ## Compare and combine global and local outliers and apply filtering
 
-Based on the comparison of global and local outliers, we choose here to adjust the global cutoffs to be less stringent:
-
-Adjust global filtering cutoffs based on previous plots (apply less stringent cutoffs)
+For the next steps we choose to:
+- adjust the global cutoffs to be less stringent
+- combine the (new) global and local outliers to perform the QC filtering
 
 ```{r}
 # adjust global filtering cutoff
 sfe$qc_lib_size <- sfe$sum < 120
 sfe$qc_detected <- sfe$detected < 100
-sfe$qc_mito_prop <- sfe$subsets_Mito_percent > 35
-```
+sfe$qc_mito_prop <- sfe$subset.proportion.Mito > 30
 
-Compare global and local outliers being flagged
-
-```{r}
+# compare global and local outliers being flagged
 sfe$global_outliers <- sfe$qc_lib_size | sfe$qc_detected | sfe$qc_mito_prop
 p1 <- plotObsQC(sfe, plot_type="spot", annotate="global_outliers")
 p2 <- plotObsQC(sfe, plot_type="spot", annotate="local_outliers")
 gridExtra::grid.arrange(p1, p2, ncol=2)
-```
 
-Combine both:
-
-```{r}
 # combine local and global outliers to create a final discard flag
 sfe$discard <- sfe$global_outliers | sfe$local_outliers
 ```
@@ -337,11 +348,11 @@ Visualize the cells that will be discarded based on the combined criteria. How m
 table(sfe$discard)
 
 # have a final look at the cells that we will discard
-plotSpatialFeature(sfe, colGeometryName = "cellseg", features = "discard")
+plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "discard")
 ```
 :::
 
-## Technical artifacts
+## Bonus: region-level technical artifacts
 
 <!--- JUNA: maybe we could skip the technical artifacts part, the result is not easy to interpret in this section -->
 
@@ -349,9 +360,11 @@ Technical artifacts can arise during tissue preparation, for example tissue diss
 
 ```{r}
 # find artifacts using SpotSweeper
+sfe$subsets_Mito_sum <- colSums(counts(sfe)[is.mito, ])
+
 sfe <- tryCatch(
   findArtifacts(sfe,
-    mito_percent = "subsets_Mito_percent",
+    mito_percent = "subset.proportion.Mito",
     mito_sum = "subsets_Mito_sum",
     n_order = 5,
     name = "artifact"
@@ -370,10 +383,7 @@ sfe <- tryCatch(
 ::: callout-important
 ## Exercise 6
 What is the `findArtifacts` function performing and what are the (potentially problematic) assumptions?
-:::
 
-::: callout-important
-## Exercise 7
 Plot the spatial distribution of the `artifact` column identified by `SpotSweeper`. What do you observe?
 :::
 
@@ -383,23 +393,29 @@ Plot the spatial distribution of the `artifact` column identified by `SpotSweepe
 ```{r}
 # Plot the spatial distribution of the detected artifacts.
 plotQCmetrics(sfe,
-    metric = "subsets_Mito_percent", # You can choose any relevant metric to display
+    metric = "subset.proportion.Mito", 
     outliers = "artifact", 
     point_size = 1.1
 ) +
     ggtitle("Detected Spatial Artifacts")
 ```
+
+The function is detecting region-level artifacts, such as "hangnail" artifacts, based on the multiscale variance of mitochondrial ratio. The exact methodology can be found in the paper and is actually quite complex and ad hoc (i.e., they devised this method after studying carefully the properties of their brain tissue section): https://pmc.ncbi.nlm.nih.gov/articles/PMC12258134/. 
+
+Here indeed the method separates two global-regions, one on the left with less variability in %MT, and one on the right with more variability. Does this mean that the region on the left should be excluded here? Probably not...
+
 :::
 
 ## Filtering 
-We decide to filter out the low-quality cells from the `SpatialExperiment` object based on the combined criteria of global thresholds and local outliers. Additionally, we will remove any features (genes) that have zero counts across all remaining cells.
+We decide to filter out the low-quality cells from the `SpatialFeatureExperiment` object based on the combined criteria of global thresholds and local outliers. Additionally, we will remove any features (genes) that have zero counts across all remaining cells.
 
 ```{r}
 # remove the cells considered of low quality based on both global and local metrics
 sfe <- sfe[, !sfe$discard]
 
-# remove features with all 0 counts
+# remove features no count at all
 sfe <- sfe[rowSums(counts(sfe)) > 0, ]
+sfe
 ``` 
 
 What is the size of the dataset after filtering?
@@ -424,8 +440,8 @@ gc()
 :::{.callout-important}
 **Key Takeaways:**
 
--   `scuttle::addPerCellQCMetrics` provides essential per-bin QC metrics.
--   `SpotSweeper::localOutliers` helps identify individual problematic cells.
--   `SpotSweeper::findArtifacts` is powerful for detecting spatially coherent regions of poor quality.
+-   `scrapper::quickRnaQc.se()` (anciently `scuttle::addPerCellQCMetrics`) provides essential per-bin QC metrics.
+-   `SpotSweeper::localOutliers` helps identify individual problematic cells relative to their local context.
+-   `SpotSweeper::findArtifacts` is more controversial but could in certain case be useful to detect region-level artifacts
 -   Visualizing QC results is critical for data interpretation and downstream analysis decisions.
 :::

@@ -124,6 +124,8 @@ spe_seg <- spe_seg[, spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
   spatialCoords(spe_seg)[, 2] <= roi_visium[["ymax"]]]
 ```
 
+<!-- Here we loose some metadata, for example the slot spe_seg$map which would allow us to calculate the cell area...)
+--->
 
 Load the previous binned object for comparison:
 
@@ -187,6 +189,51 @@ seg <- seg[i, ]
 colGeometries(sfe_seg)[["cellSeg"]] <- seg
 colGeometries(sfe_seg)
 ```
+
+<!-- TO DO? 
+Julien: could be potentially nice to add the cell area, here is some code inspired from the OSTA book to do it. (But I admit it's not straightforward!) 
+
+```{r}
+## use the info in spe_seg$map (before subsetting)
+map_by_cell <- spe_seg$map
+map_by_cell <- map_by_cell[names(map_by_cell) %in% colnames(sfe), ]
+
+## Otherwise get it with:  
+download.file(
+  url = "https://cf.10xgenomics.com/samples/spatial-exp/4.1.0/Visium_HD_11mm_Human_Colon_Cancer_Fresh_Frozen/Visium_HD_11mm_Human_Colon_Cancer_Fresh_Frozen_barcode_mappings.parquet",
+  destfile = "data/segmented_outputs/Visium_HD_11mm_Human_Colon_Cancer_Fresh_Frozen_barcode_mappings.parquet",
+  mode = "wb"
+)
+head(map <- read_parquet("data/segmented_outputs/Visium_HD_11mm_Human_Colon_Cancer_Fresh_Frozen_barcode_mappings.parque"))
+map <- map[map$cell_id %in% colnames(sfe), ]
+map_by_cell <- split(map, map$cell_id)
+
+
+## Then:
+idx <- match(colnames(sfe), names(map_by_cell))
+sfe$map <- map_by_cell[idx] # list of tibbles
+
+# percentage of segmented 2um bins
+frac <- with(map, c(
+    nuclear=mean(in_nucleus), 
+    cellular=mean(in_cell)))
+round(100*frac, digits=2)
+#  nuclear cellular 
+#     34.2    100.0 
+
+
+# get cell area = 2x number of 2um bins
+um2 <- 4*unlist(sapply(sfe$map, nrow))
+sfe$um2 <- 0
+sfe[, names(um2)]$um2 <- um2
+
+# get fraction of 2um bins that are nuclear
+sfe$nuc <- sapply(sfe$map, \(.) mean(.$in_nucleus))
+# get nucleus areas = cell area x nuclear fraction
+sfe$nuc_um2 <- sfe$um2*sfe$nuc
+
+```
+-->
 
 We can visualize the geometries with a simple scatterplot, or these can be used in wrapper functions such as `plotSpatialFeature()` from the `Voyager` package:
 
