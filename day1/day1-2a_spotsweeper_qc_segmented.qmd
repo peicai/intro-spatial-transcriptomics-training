@@ -198,7 +198,7 @@ p1 + p2
 
 ```
 
-Stringent cutoff lead to excluding cells in specific cellular structures, so quite likely excluding some specific cell types, which is not ideal. We have the opportunity to see that directly on the slide here, which is not the case when we analyze scRNA-seq data... There, a choice of a stringent cutoff can filter out entirely some cell types without us noticing!  
+Stringent cutoffs lead to excluding cells in specific cellular structures, so quite likely excluding some specific cell types, which is not ideal. We have the opportunity to see that directly on the slide here, which is not the case when we analyze scRNA-seq data... There, a choice of a stringent cutoff can filter out entirely some cell types without us noticing!  
 
 
 :::
@@ -424,11 +424,9 @@ What is the size of the dataset after filtering?
 
 ## Save the object
 
-Save the filtered `SpatialExperiment` object for the next steps:
+Save the filtered `SpatialFeatureExperiment` object for the next steps:
 ```{r}
-saveHDF5SummarizedExperiment(sfe, dir="results/day1", prefix="01.2_sfe_", replace=TRUE,
-                                chunkdim=NULL, level=NULL, as.sparse=NA,
-                                verbose=NA)
+alabaster.sfe::saveObject(sfe, "results/day1/01.2_sfe_visium")
 ```
 
 Clear your environment:

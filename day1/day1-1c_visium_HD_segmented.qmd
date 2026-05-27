@@ -41,9 +41,16 @@ library(alabaster.base)
 library(alabaster.sfe)
 ```
 
-Finally, we will work with the **Visium HD segmented output**. This data corresponds to the same sample and region of interest as the binned data from `Exercise 1A`, but instead of being binned, it contains the output of cell segmentation. Since Space Ranger version 4.0, the output of cell segmentation is available as an optional output of the pipeline, and it contains the coordinates of the segmented cells and their boundaries.
+Finally, we will work with the **Visium HD segmented output**. This data corresponds to the same sample and region of interest as the binned data from `Exercise 1A`, but instead of being binned, it contains the output of cell segmentation. Since Space Ranger version 4, the output of cell segmentation is available as an optional output of the pipeline, and it contains the coordinates of the segmented cells and their boundaries.
 
-<!-- TO DO: we need to make a smaller version of the dataset for the course. Can it include the imgData as well?-->
+<!-- TO DO: we need to make a smaller version of the dataset for the course. Can it include the imgData as well?
+Be careful that there are 2 versions of the dataset, one mapped with SpaceRanger 4.0.1 and one with SpaceRanger 4.1.0!!!
+https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-libraries-of-human-crc-v4
+https://www.10xgenomics.com/datasets/visium-hd-cytassist-11mm-human-colon-cancer-HE
+
+-->
+
+## Data download 
 
 ```{r day1-1c-visium_HD_segmented-3}
 options(timeout = 2000)
@@ -61,6 +68,12 @@ if (!dir.exists("data/segmented_outputs/")) {
     exdir = "data/"
   )
 
+  download.file(
+    url = "https://cf.10xgenomics.com/samples/spatial-exp/4.0.1/Visium_HD_Human_Colon_Cancer/Visium_HD_Human_Colon_Cancer_barcode_mappings.parquet",
+    destfile = "data/segmented_outputs/Visium_HD_Human_Colon_Cancer_barcode_mappings.parquet",
+    mode = "wb"
+  )
+  
   file.remove("data/Visium_HD_Human_Colon_Cancer_segmented_outputs.tar.gz")
 } else {
   message("Data exists, please proceed to next steps!")
@@ -86,16 +99,16 @@ if (!dir.exists("data/segmented_outputs/")) {
 One limitation is that a bin can overlap than one cell, so the assignment of the transcripts captured would be ambiguous. Of course this approach relies also on the quality of the segmentation mask. 
 ::: 
 
-
 Here we will proceed in two steps:
 - We start reading the object into a `SpatialExperiment` object and subset it to the region of interest, as we have done for Visium HD binned data in the previous exercises. This allows a quick comparison of the two types of processing for the same slide
 - We then convert the object to create a `SpatialFeatureExperiment` object and add the cell segmentation information to it/
+
+## Import into a SpatialExperiment object and subsetting
 
 ```{r day1-1c-visium_HD_segmented-4}
 # Read the segmented output into a SpatialExperiment object
 spe_seg <- TENxVisiumHD(
   segmented_outputs = "data/segmented_outputs/",
-  # processing = "filtered",
   processing = "raw",
   format = "h5",
   images = "lowres"
@@ -111,24 +124,18 @@ spe_seg
 ```
 
 <!--
-TO DO: import geometries from data folder
--->
+Testing import of segmentation data directly from the data/ folder instead 
+
 ```{r}
 geo_data <- st_read("data/segmented_outputs/cell_segmentations.geojson")
-
-dim(geo_data) # 220704
-dim(spe_seg) # 220703 / 220704 if processing = "raw"!
-
-## Assuming this is correct
+## Assuming the cells are in the same order
 geo_data$cell_id <- colnames(spe_seg)
 row.names(geo_data) <- geo_data$cell_id
-
-seg <- metadata(spe_seg)$cellseg
-
-head(geo_data)
-head(seg)
+# colGeometries(sfe_seg)[["cellSeg"]] <- geo_data[colnames(sfe_seg), ]
 ```
 
+TO DO: import other segmentations masks? Could be nice to see whihc bins overlap cell boundaries!
+-->
 
 ```{r day1-1c-visium_HD_segmented-5}
 # Subset to the region of interest
@@ -146,9 +153,9 @@ spe_seg <- spe_seg[, spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
   spatialCoords(spe_seg)[, 2] <= roi_visium[["ymax"]]]
 ```
 
-<!-- The slot spe_seg$map includes interesting info, which allows us to calculate the cell area for example
+<!--
+The slot spe_seg$map includes interesting info, which allows us to calculate the cell area for example
 ```{r}
-map_by_cell <- spe_seg$map
 spe_seg$map |> head()
 ```
 --->
@@ -168,7 +175,7 @@ spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_spe_")
 
 :::
 
-<!-- TO DO: Adapt the questions depending on the final order of exercises, add answers -->
+<!-- TO DO: Add answers -->
 
 ```{r day1-1c-visium_HD_segmented-7}
 spe_seg
@@ -195,6 +202,8 @@ Using visium HD segmented data allows us to have a more detailed view of the tis
 
 We can also have access to the full segmentation of the cells (i.e., the boundaries of each segmented cell), but contrary to the `SpatialFeatureExperiment`, this cannot be stored natively in a slot of the `SpatialExperiment` object, so it is stored in the `metadata` of the object.
 
+## Create a SpatialFeatureExperiment object 
+
 In order to manipulate the segmentation in an easier way, we create a `SpatialFeatureExperiment` object, which allows us to store and visualize spatial features (e.g., see the `colGeometries()` function used in Exercise 1B). We need to add the cell segmentation boundaries to the list of geometries.
 
 <!--TO DO: Adapt depending on the final order of exercises -->
@@ -216,35 +225,17 @@ colGeometries(sfe_seg)[["cellSeg"]] <- seg
 colGeometries(sfe_seg)
 ```
 
-
 <!--
 TO DO? 
-Julien: could be potentially nice to add the cell area, here is some code inspired from the OSTA book to do it, but I struggled with it, cells to bin assignment did not seem to match, I could not find what was wrong...:
+Julien: could be potentially nice to add the cell area, here is some code inspired from the OSTA book to do it
 
 ```{r}
 # get cell area = 4um x number of 2um bins
-# um2 <- 4*sapply(sfe_seg$map, nrow) 
-
-# I had some issues because some cells are empty...The easiest was to filter them out here
-um2 <- 4*unlist(sapply(sfe_seg$map, nrow))
-table(names(um2) %in% colnames(sfe_seg))
-sfe_seg <- sfe_seg[, colnames(sfe_seg) %in% names(um2)]
-table(names(um2) == colnames(sfe_seg))
-
+um2 <- 4*sapply(sfe_seg$map, nrow) 
 sfe_seg$um2 <- um2
-
 plotSpatialFeature(sfe_seg, 
                    colGeometryName="cellSeg", 
                    features="um2")
-
-head(map <- read_parquet("data/segmented_outputs/Visium_HD_11mm_Human_Colon_Cancer_Fresh_Frozen_barcode_mappings.parquet"))
-## largest in wrong results
-map[map$cell_id %in% "cellid_000131760-1", ] # 78 bins!
-## Largest (really)
-map[map$cell_id %in% "cellid_000132684-1", ] # 10 bins only!
-
-
-spe_seg3$map[["cellid_000132684-1"]]
 
 # get fraction of 2um bins that are nuclear
 sfe_seg$nuc <- sapply(sfe_seg$map, \(.) mean(.$in_nucleus))
@@ -252,18 +243,29 @@ sfe_seg$nuc <- sapply(sfe_seg$map, \(.) mean(.$in_nucleus))
 sfe_seg$nuc_um2 <- sfe_seg$um2*sfe_seg$nuc
 ```
 
-It's simple to get this from the cellSeg geometry directly anyway 
+But see below, it's simpler to calculate the area from the geometry directly anyway 
 ```{r}
 st_area(colGeometries(sfe_seg)[["cellSeg"]]) |> head()
 plot(st_area(colGeometries(sfe_seg)[["cellSeg"]]), sfe_seg$um2)
-## doesn't seem to match...
+## just a scaling factor, from um^2 to pixels (?)
 
-## look at reimported geom
-colGeometries(sfe_seg)[["cellSegNew"]] <- geo_data[colnames(sfe_seg), ]
-plot(st_area(colGeometries(sfe_seg)[["cellSegNew"]]), sfe_seg$um2)
+## Correlated to the total counts
+plot(st_area(colGeometries(sfe_seg)[["cellSeg"]]), colSums(counts(sfe_seg)), log="xy")
+```
 
+TO DO: Maybe simpler to import directly to SFE with function from SpatialFeatureExperiment package?
+```{r}
+sfe3 <- readVisiumHD(data_dir="data/", use_cellseg = TRUE, unit = "full_res_image_pixel")
+## TO DO: uniquifyFeatureNames, etc
 
+## Subsetting
+sfe3 <- sfe3[, spatialCoords(sfe3)[, 1] >= roi_visium[["xmin"]] &
+  spatialCoords(sfe3)[, 1] <= roi_visium[["xmax"]] &
+  spatialCoords(sfe3)[, 2] >= roi_visium[["ymin"]] &
+  spatialCoords(sfe3)[, 2] <= roi_visium[["ymax"]]]
+colGeometries(sfe3)
 
+plot(st_area(colGeometries(sfe3)[["cellSeg"]]), colSums(counts(sfe3)), log="xy")
 ```
 
 -->
@@ -289,7 +291,7 @@ plotSpatialFeature(sfe_seg,
 plotSpatialFeature(sfe_seg, 
                    colGeometryName="cellSeg", 
                    features="PIGR", 
-                   exprs_values = "counts") + 
+                   exprs_values = "counts") 
 ```  
 :::
 
@@ -337,9 +339,10 @@ As you could see above, the `SpatialFeatureExperiment` includes additional layer
 The best way to save the object would be to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
 
 ```{r}
-# The "cellseg" slot of the metadata is problematic, let's remove it
+# The "cellseg" slot of the metadata is problematic, let's remove it ebcause it's now stored as colGeometry slot 
 metadata(sfe_seg) <- metadata(sfe_seg)[1:2]  
-mkdir("results/day1")
+
+# mkdir("results/day1")
 alabaster.sfe::saveObject(sfe_seg, "results/day1/01.1_sfe_visium")
 fs::dir_tree("results/day1/01.1_sfe_visium")
 
