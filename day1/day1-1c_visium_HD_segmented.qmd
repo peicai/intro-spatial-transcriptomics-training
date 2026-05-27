@@ -36,6 +36,9 @@ library(Voyager)
 library(VisiumIO)
 library(ggspavis)
 library(HDF5Array)
+
+library(alabaster.base)
+library(alabaster.sfe)
 ```
 
 Finally, we will work with the **Visium HD segmented output**. This data corresponds to the same sample and region of interest as the binned data from `Exercise 1A`, but instead of being binned, it contains the output of cell segmentation. Since Space Ranger version 4.0, the output of cell segmentation is available as an optional output of the pipeline, and it contains the coordinates of the segmented cells and their boundaries.
@@ -92,7 +95,8 @@ Here we will proceed in two steps:
 # Read the segmented output into a SpatialExperiment object
 spe_seg <- TENxVisiumHD(
   segmented_outputs = "data/segmented_outputs/",
-  processing = "filtered",
+  # processing = "filtered",
+  processing = "raw",
   format = "h5",
   images = "lowres"
 ) |>
@@ -105,6 +109,26 @@ rownames(spe_seg) <- uniquifyFeatureNames(
 
 spe_seg
 ```
+
+<!--
+TO DO: import geometries from data folder
+-->
+```{r}
+geo_data <- st_read("data/segmented_outputs/cell_segmentations.geojson")
+
+dim(geo_data) # 220704
+dim(spe_seg) # 220703 / 220704 if processing = "raw"!
+
+## Assuming this is correct
+geo_data$cell_id <- colnames(spe_seg)
+row.names(geo_data) <- geo_data$cell_id
+
+seg <- metadata(spe_seg)$cellseg
+
+head(geo_data)
+head(seg)
+```
+
 
 ```{r day1-1c-visium_HD_segmented-5}
 # Subset to the region of interest
@@ -181,16 +205,17 @@ colGeometries(sfe_seg)
 
 ## Extract cell segmentation boundaries from the metadata
 seg <- metadata(spe_seg)$cellseg
-rownames(seg) <- metadata(spe_seg)$cellseg$cell_id
+rownames(seg) <- seg$cell_id
 
 ## Sort the segmentation similar to the order of cells in the SpatialFeatureExperiment object
-i <- match(colnames(spe_seg), rownames(seg))
+i <- match(colnames(sfe_seg), rownames(seg))
 seg <- seg[i, ]
 
 ## Add the geometry to the object
 colGeometries(sfe_seg)[["cellSeg"]] <- seg
 colGeometries(sfe_seg)
 ```
+
 
 <!--
 TO DO? 
@@ -232,6 +257,12 @@ It's simple to get this from the cellSeg geometry directly anyway
 st_area(colGeometries(sfe_seg)[["cellSeg"]]) |> head()
 plot(st_area(colGeometries(sfe_seg)[["cellSeg"]]), sfe_seg$um2)
 ## doesn't seem to match...
+
+## look at reimported geom
+colGeometries(sfe_seg)[["cellSegNew"]] <- geo_data[colnames(sfe_seg), ]
+plot(st_area(colGeometries(sfe_seg)[["cellSegNew"]]), sfe_seg$um2)
+
+
 
 ```
 
@@ -297,30 +328,24 @@ plotSpatialFeature(sfe_zoomed,
 When zooming in, we can clearly see that 2 um bins make up each cell in the dataset.
 :::
 
+## Saving the object
 
-Save the object
-```{r day1-1c-visium_HD_segmented-12}
-saveHDF5SummarizedExperiment(sfe_seg,
-  dir = "results/day1", prefix = "01.1_sfe_visium_", replace = TRUE,
-  chunkdim = NULL, level = NULL, as.sparse = NA,
-  verbose = NA
-)
-```
+In the `Exercise 1A` we used the function `saveHDF5SummarizedExperiment` because the count matrix of the `SpatialExperiment` object is stored on-disk for efficiency.
 
-<!--
-TO DO: Even using this, some out-of-memory components break when re-importing because the original file is unavailable or is tied to some absolute path. E.g., 
+As you could see above, the `SpatialFeatureExperiment` includes additional layers, and some of them are also not loaded in memory. This complicates things further and even saving the object with the  `saveHDF5SummarizedExperiment` function does not allow to fully re-import it.
 
-Error in (function (cond)  : 
-  error in evaluating the argument 'x' in selecting a method for function 'colData': external pointer is not valid
-
-Another (better) way to save the object would be to use the alabaster.sfe package, but I failed to install it on my Mac...
+The best way to save the object would be to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
 
 ```{r}
-fsave <- file.path("results/day1", "01.1_sfe_visium")
-alabaster.sfe::saveObject(sfe_seg, fsave)
-dir_tree(fsave)
+# The "cellseg" slot of the metadata is problematic, let's remove it
+metadata(sfe_seg) <- metadata(sfe_seg)[1:2]  
+mkdir("results/day1")
+alabaster.sfe::saveObject(sfe_seg, "results/day1/01.1_sfe_visium")
+fs::dir_tree("results/day1/01.1_sfe_visium")
+
+## Reload the dataset
+# sfe_test <- alabaster.base::readObject("results/day1/01.1_sfe_visium/")
 ```
--->
 
 For the rest of the exercises, we will use this Visium HD segmented object, but feel free to replace by the binned object (`Exercise 1A`) or the Xenium object (`Exercise 1B`) to compare the results.
  

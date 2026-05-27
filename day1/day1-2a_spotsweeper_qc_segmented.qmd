@@ -56,8 +56,10 @@ We will start by loading our `SpatialFeatureExperiment` object, which was saved 
 
 
 ```{r}
-# Load the SpatialExperiment object if not in the R session already
-sfe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_sfe_visium_")
+# Reload the SpatialFeatureExperiment object if not in the R session already
+sfe <- alabaster.base::readObject("results/day1/01.1_sfe_visium/")
+## Otherwise, quickly go through Exercise day1-1c to recreate the object
+
 
 # Identify mitochondrial genes (genes with symbol starting with "MT-")
 is.mito <- rownames(sfe)[grepl("^MT-", rownames(sfe))]
