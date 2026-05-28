@@ -272,14 +272,16 @@ plotSpatialFeature(sfe,
 
 ## Save the object
 
+In the `Exercise 1A` we used the function `saveHDF5SummarizedExperiment` because the count matrix of the `SpatialExperiment` object is stored on-disk for efficiency.
+
+As you could see above, the `SpatialFeatureExperiment` includes additional layers, and some of them are also not loaded in memory. This complicates things further and even saving the object with the  `saveHDF5SummarizedExperiment` function does not allow to fully re-import it.
+
+A nice way to save the object is to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
+
 ```{r day1-1b-SFE-14}
 dir.create("results/day1", showWarnings = FALSE, recursive = TRUE)
 
-saveHDF5SummarizedExperiment(sfe,
-  dir = "results/day1", prefix = "01.1b_sfe_xenium_", replace = TRUE,
-  chunkdim = NULL, level = NULL, as.sparse = NA,
-  verbose = NA
-)
+alabaster.sfe::saveObject(sfe, "results/day1/01.1b_sfe_xenium")
 ```
 
 Clear your environment:

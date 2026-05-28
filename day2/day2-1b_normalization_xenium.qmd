@@ -44,7 +44,9 @@ library(HDF5Array)
 We start with the Xenium object saved at the end of Exercise 1B.
 
 ```{r}
-sfe <- loadHDF5SummarizedExperiment(dir = "results/day1", prefix = "01.1b_sfe_xenium_")
+# Reload the SpatialFeatureExperiment object if not in the R session already
+sfe <- alabaster.base::readObject("results/day1/01.1b_sfe_xenium/")
+## Otherwise, quickly go through Exercise day1-1c to recreate the object
 sfe
 ```
 
@@ -60,7 +62,7 @@ table(cell_totals == 0)
 
 sfe <- sfe[, cell_totals > 0]
 
-sfe <- logNormCounts(sfe)
+sfe <- scrapper::normalizeRnaCounts.se(sfe)
 
 assayNames(sfe)
 summary(sizeFactors(sfe))
@@ -85,15 +87,17 @@ Cells with zero total counts would have zero size factors, but size factors must
 ::: callout-important
 ## Exercise 2
 
-How is normalization of Xenium cells conceptually different from normalization of Visium HD bins?
+How is normalization of Xenium data conceptually different from normalization of Visium HD data?
 :::
 
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-Visium HD bins are fixed spatial areas. Differences in total counts can reflect tissue density, local capture efficiency, and biology within each bin.
+Visium HD binned data are fixed spatial areas. Differences in total counts can reflect tissue density, local capture efficiency, and biology within each cell.
 
-Xenium columns are segmented cells. Differences in total counts can reflect cell size, segmentation, local detection efficiency, and the targeted panel design. Because Xenium measures a selected panel of genes, normalized values are useful but should not be interpreted exactly like whole-transcriptome logcounts.
+In Visium HD or Xenium segmented cells, differences in total counts can reflect cell size, segmentation, local detection efficiency
+
+Specific to the Xenium is the targeted panel design. Because Xenium measures a selected panel of genes, normalized values are useful but should not be interpreted exactly like whole-transcriptome logcounts. Indeed the panels are often create to study specific cell-types in the tissue section, which breaks some assumpitons of the normalization methods. See this interesting paper about this issue: https://link.springer.com/article/10.1186/s13059-024-03303-w
 :::
 
 We can compare raw and log-normalized spatial patterns for a marker present in the Xenium panel.
@@ -151,7 +155,7 @@ We save the normalized Xenium object for later optional comparisons.
 
 ```{r}
 dir.create("results/day2", showWarnings = FALSE, recursive = TRUE)
-saveRDS(sfe, "results/day2/02.1b_sfe_p2.rds")
+alabaster.sfe::saveObject(sfe, "results/day2/02.1b_sfe_xenium")
 ```
 
 Clear your environment:

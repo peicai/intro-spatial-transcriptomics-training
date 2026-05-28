@@ -123,20 +123,6 @@ rownames(spe_seg) <- uniquifyFeatureNames(
 spe_seg
 ```
 
-<!--
-Testing import of segmentation data directly from the data/ folder instead 
-
-```{r}
-geo_data <- st_read("data/segmented_outputs/cell_segmentations.geojson")
-## Assuming the cells are in the same order
-geo_data$cell_id <- colnames(spe_seg)
-row.names(geo_data) <- geo_data$cell_id
-# colGeometries(sfe_seg)[["cellSeg"]] <- geo_data[colnames(sfe_seg), ]
-```
-
-TO DO: import other segmentations masks? Could be nice to see whihc bins overlap cell boundaries!
--->
-
 ```{r day1-1c-visium_HD_segmented-5}
 # Subset to the region of interest
 roi_visium <- c(
@@ -224,6 +210,42 @@ seg <- seg[i, ]
 colGeometries(sfe_seg)[["cellSeg"]] <- seg
 colGeometries(sfe_seg)
 ```
+
+<!--
+Testing import of segmentation data directly from the data/ folder instead 
+
+```{r}
+geo_data <- st_read("data/segmented_outputs/cell_segmentations.geojson")
+## Assuming the cells are in the same order
+geo_data <- geo_data[spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
+  spatialCoords(spe_seg)[, 1] <= roi_visium[["xmax"]] &
+  spatialCoords(spe_seg)[, 2] >= roi_visium[["ymin"]] &
+  spatialCoords(spe_seg)[, 2] <= roi_visium[["ymax"]], ]
+geo_data$cell_id <- colnames(sfe_seg)
+row.names(geo_data) <- colnames(sfe_seg)
+# colGeometries(sfe_seg)[["cellSeg"]] <- geo_data[colnames(sfe_seg), ]
+
+## Importing other segmentations mask, for example it is nice to see the exact segmentation performed by SpaceRanger, or use another method for segmentation?
+
+geo_data <- st_read("data/segmented_outputs/nucleus_segmentations.geojson")
+geo_data <- geo_data[spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
+  spatialCoords(spe_seg)[, 1] <= roi_visium[["xmax"]] &
+  spatialCoords(spe_seg)[, 2] >= roi_visium[["ymin"]] &
+  spatialCoords(spe_seg)[, 2] <= roi_visium[["ymax"]], ]
+geo_data$cell_id <- colnames(sfe_seg)
+row.names(geo_data) <- colnames(sfe_seg)
+st_crs(geo_data) <- NA_crs_
+
+colGeometries(sfe_seg)[["nucleusSeg"]] <- geo_data[colnames(sfe_seg), ]
+
+plotSpatialFeature(sfe_seg, 
+                   colGeometryName="nucleusSeg", 
+                   features="PIGR", 
+                  exprs_values = "counts")
+```
+Details on SpaceRanger segmentation algo: https://www.10xgenomics.com/support/software/space-ranger/latest/algorithms-overview/image-processing
+
+-->
 
 <!--
 TO DO? 
@@ -336,7 +358,7 @@ In the `Exercise 1A` we used the function `saveHDF5SummarizedExperiment` because
 
 As you could see above, the `SpatialFeatureExperiment` includes additional layers, and some of them are also not loaded in memory. This complicates things further and even saving the object with the  `saveHDF5SummarizedExperiment` function does not allow to fully re-import it.
 
-The best way to save the object would be to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
+A nice way to save the object is to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
 
 ```{r}
 # The "cellseg" slot of the metadata is problematic, let's remove it ebcause it's now stored as colGeometry slot 

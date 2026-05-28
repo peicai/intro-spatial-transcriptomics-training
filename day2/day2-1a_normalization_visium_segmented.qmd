@@ -10,18 +10,16 @@ execute:
 
 ## Normalization and scaling for Visium HD
 
-In this exercise, we normalize the filtered Visium HD object from `Exercise 2`. The observations are 16 um spatial bins, not individual cells.
-
-Standard library-size normalization is a useful starting point, but spatial data need careful interpretation: total counts can vary because of local capture efficiency, tissue density, morphology, or real biology.
+In this exercise, we normalize the filtered Visium HD object from yesterday's `Exercise 2`. Standard library-size normalization, as used for scRNA-seq analysis, is a useful starting point, but spatial data introduces additional challenges: total counts can vary because of local capture efficiency, tissue density, morphology, or real biology.
 
 ## Learning objectives
 
 By the end of this exercise, you will be able to:
 
 - Add log-normalized values to a Visium HD `SpatialExperiment`.
-- Insfect size factors and assay names.
+- Inspect size factors and assay names.
 - Scale selected features for visualization and downstream multivariate methods.
-- Discuss why spatially-aware normalization can be useful.
+- Understand the principles of spatially-aware normalization and evaluate whether it could be useful for a given dataset.
 
 ## Libraries
 
@@ -32,6 +30,7 @@ By the end of this exercise, you will be able to:
 
 library(SpatialExperiment)
 library(scuttle)
+library(scrapper)
 library(scater)
 library(HDF5Array)
 library(ggspavis)
@@ -42,21 +41,18 @@ library(ggspavis)
 We start with the filtered Visium HD object saved at the end of Exercise 2.
 
 ```{r}
-sfe <- loadHDF5SummarizedExperiment(dir = "results/day1", prefix = "01.2_sfe_")
+# Reload the SpatialFeatureExperiment object if not in the R session already
+sfe <- alabaster.base::readObject("results/day1/01.2_sfe_visium/")
 sfe
 ```
 
 ## Log-normalization
 
-The object contains raw counts. We use `scuttle::logNormCounts()` to compute size factors and add a `logcounts` assay.
+The object contains raw counts. We use `scrapper::normalizeRnaCounts.se()`, a faster replacement for the `scuttle::logNormCounts()` function to compute size factors and add a `logcounts` assay.
 
 ```{r}
 assayNames(sfe)
-
-sfe <- logNormCounts(sfe)
-
-assayNames(sfe)
-summary(sizeFactors(sfe))
+sfe <- scrapper::normalizeRnaCounts.se(sfe)
 ```
 
 ::: callout-important
@@ -73,17 +69,20 @@ assayNames(sfe)
 summary(sizeFactors(sfe))
 ```
 
-The `logcounts` assay contains log-normalized expression values. The size factors adjust for differences in total count depth between bins.
+The `logcounts` assay contains log-normalized expression values. The size factors adjust for differences in total count depth between cells.
+
+*NOTE*: Other more advanced normalization methods exist for scRNA-seq data, which aim at adjusting for compositional biases across cells, for example `scuttle::computePooledFactors()`, or at stabilizing the variance of such low-counts data, for example `Seurat:SCTranform()`
+
 :::
 
-We can inspect whether size factors have a spatial pattern.
+We can inspect whether size factors have a spatial pattern. 
 
 ```{r}
 colData(sfe)$sizeFactor <- sizeFactors(sfe)
 
 plotSpatialFeature(
     sfe,
-    colGeometryName = "cellseg", features = "sizeFactor"
+    colGeometryName = "cellSeg", features = "sizeFactor"
 )
 ```
 
@@ -95,7 +94,7 @@ Do size factors show a spatial pattern across the tissue region? What biological
 
 ## Scaling selected features
 
-Normalization adjusts for differences in total counts between observations. Scaling is a different step: it centers and rescales features so that they can be compared on a common scale. This is often useful before multivariate methods such as PCA, clustering, or heatmaps.
+Normalization adjusts for differences in total counts between observations. Scaling is a different step: it centers and rescales features so that they can be compared on a common scale. This is often useful for multivariate methods such as PCA, clustering, or heatmaps, to avoid giving more weight to more highly expressed genes.
 
 Here we demonstrate scaling on a small set of marker genes.
 
@@ -117,13 +116,13 @@ visium_scaled[, 1:5]
 ::: callout-important
 ## Exercise 3
 
-What does a positive scaled value mean for a gene in one bin? Why should scaling be applied after normalization rather than directly to raw counts?
+What does a positive scaled value mean for a gene in one cell? Why should scaling be applied after normalization rather than directly to raw counts?
 :::
 
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-A positive scaled value means that the bin has expression above the average for that gene, relative to the variation of that gene across the dataset. Scaling should be applied after normalization because raw counts are strongly affected by sequencing depth.
+A positive scaled value means that the cell has expression above the average for that gene, relative to the variation of that gene across the dataset. Scaling should be applied after normalization because raw counts are strongly affected by sequencing depth.
 :::
 
 ## Optional: spatially-aware normalization
@@ -131,9 +130,9 @@ A positive scaled value means that the bin has expression above the average for 
 ::: callout-note
 ## Optional discussion
 
-Standard library-size normalization treats differences in total counts as mostly technical. In spatial transcriptomics, this assumption can be imperfect: total counts can vary because of tissue density, local capture efficiency, morphology, or real biology.
+In spatial transcriptomics, in addition to sequencing depth, total counts can vary because of tissue density, local capture efficiency, or morphological structures. Many of these factors are partially confounded with biology, for example with the differences observed across cell types. 
 
-Spatially-aware normalization methods try to account for spatial structure while avoiding the removal of true spatial biological signal. This is an active area of method development. OSTA discusses these issues in the context of spatial workflows, and packages such as `SpaNorm` can be explored as optional extensions.
+Spatially-aware normalization methods try to account for spatial structure while avoiding the removal of true spatial biological signal. This is an active area of method development, cf. the [OSTA book discussion](https://lmweber.org/OSTA/pages/ind-normalization.html) about these issues. Packages such as `SpaNorm` can be explored as optional extensions, but their basic assumption might not apply to all tissues (e.g., the cell type composition is relatively homogenous in brain so spatial smoothing might be advantageous, but it is not in our colon sample, so is smoothing a good idea?) 
 
 For this course, we keep the required workflow simple and use `logNormCounts()`. When interpreting the downstream results, remember that spatial structure in size factors or total counts may itself be informative.
 :::
@@ -157,16 +156,7 @@ We save the normalized Visium HD object for downstream exercises.
 ```{r}
 dir.create("results/day2", showWarnings = FALSE, recursive = TRUE)
 
-saveHDF5SummarizedExperiment(
-  sfe,
-  dir = "results/day2",
-  prefix = "02.1_sfe_",
-  replace = TRUE,
-  chunkdim = NULL,
-  level = NULL,
-  as.sparse = NA,
-  verbose = NA
-)
+alabaster.sfe::saveObject(sfe, "results/day1/02.1_sfe")
 ```
 
 Clear your environment:
@@ -183,5 +173,5 @@ gc()
 
 - `logNormCounts()` adds a `logcounts` assay and stores size factors.
 - Scaling centers and rescales genes after normalization.
-- Spatial structure in size factors may be technical, biological, or both.
+- Spatial structure in size factors may be technical, biological, but likely reflects both.
 :::
