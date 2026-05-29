@@ -29,6 +29,7 @@ By the end of this exercise, you will be able to:
 
 library(SpatialExperiment)
 library(SpatialFeatureExperiment)
+library(Voyager)
 library(scran) 
 library(scater) 
 library(ggplot2)
