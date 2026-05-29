@@ -32,9 +32,10 @@ library(GenomeInfoDb)
 library(scrapper)
 # library(SingleR)
 # library(BayesSpace)
-# library(xgboost)
+library(xgboost)
 library(namer)
 library(styler)
+library(yaml)
 ```
 
 ```{r day1-1a-SpatialExperiment-2}

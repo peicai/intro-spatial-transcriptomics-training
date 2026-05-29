@@ -10,6 +10,10 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     openssh-client \
+    curl \
+    ca-certificates \
+    tar \
+    gzip \
     libxt6 \
     libgl1 \
     libcurl4-openssl-dev \
@@ -37,12 +41,27 @@ RUN apt-get update && apt-get install -y \
     gdal-bin \
     fonts-dejavu \
     fontconfig \
+    default-jdk \
+    r-cran-rjava \
+    && R CMD javareconf \
     && rm -rf /var/lib/apt/lists/*
 
 COPY renv.lock ./
 
 ENV RENV_INSTALL_THREADS=8
+ENV RENV_DOWNLOAD_FILE_METHOD=libcurl
+ENV RENV_CONFIG_PAK_ENABLED=FALSE
 
-RUN Rscript -e 'install.packages("renv", version = "1.1.8", repos="https://cloud.r-project.org", type="source")'
 
-RUN Rscript -e 'renv::restore()'
+RUN Rscript -e 'install.packages("remotes", repos="https://cloud.r-project.org")'
+RUN Rscript -e 'remotes::install_version("renv", version = "1.2.2", repos="https://cloud.r-project.org")'
+
+# install xgboost first (required by BayesSpace)
+RUN Rscript -e 'install.packages("xgboost", repos = c("https://dmlc.r-universe.dev", "https://cloud.r-project.org"))'
+
+# restore everything except renv and xgboost
+RUN Rscript -e 'renv::restore(exclude = c("renv")'
+
+EXPOSE 8787
+
+CMD ["/init"]
