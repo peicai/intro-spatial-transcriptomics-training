@@ -7,3 +7,94 @@ editor_options:
 execute:
   warning: false
 ---
+
+```{r}
+#| message: false
+#| warning: false
+#| output: false
+
+library(patchwork)
+library(SpatialExperiment)
+library(SpatialFeatureExperiment)
+library(Voyager)
+library(SingleR)
+library(viridis)
+library(RColorBrewer)
+library(pheatmap)
+library(alabaster.sfe)
+```
+
+## Dataset loading
+We will start by loading the segmented Visium HD dataset stored in the `SpatialFeatureExperiment` object generated in the previous exercise. It contains information on the non-spatially-aware and spatially-aware clusters computed with graph-based clustering Banksy and PCA.
+
+```{r}
+# Reload the SpatialFeatureExperiment object if not in the R session already
+sfe <- readObject("results/day2/02.3_sfe/")
+sfe
+```
+
+## TO DO: loading oa single-cell Chromium FLEX dataset
+
+
+## Perform cell-type annotation of the spots
+
+We'll use the annotation of the scRNA-seq dataset (10X FLEX technology) generated along with the VisiumHD used in the practicals (See the record on [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE280311) and the related [Github repository](https://github.com/10XGenomics/HumanColonCancer_VisiumHD/tree/main)). We subsetted this reference dataset to 5,000 cells.
+
+To annotate each spot, we use the `SingleR()` method, which uses a correlation-based approach comparing test cells (here: spots) to reference samples with known cell-type annotation.
+
+
+```{r}
+ref.se = qs_read("data/Human_Colon_Cancer_P1/NatGenetics2025_CRC_5k.SE.qs")
+table(colData(ref.se)$labels)
+
+# Predict cell-type using SingleR 
+pred <- SingleR(test   = logcounts(sfe),
+                ref    = assay(ref.se, "data"), # log-normalized counts        
+                labels = ref.se$labels,
+                aggr.ref = TRUE,                # pseudo-bulk aggregation of reference labels  
+                fine.tune = FALSE,              # for faster computation here
+)
+sfe$SingleR_label <- pred$pruned.labels
+table(sfe$SingleR_label)
+# visualize the predictions on the tissue slide.
+plotCoords(sfe, annotate="SingleR_label", point_shape = 15, point_size = 1) + 
+  scale_colour_brewer(palette = "Set1")
+plotVisium(sfe, annotate="SingleR_label", zoom = T, point_shape = 22, point_size = 1) + 
+  scale_fill_brewer(palette = "Set1")
+```
+
+:::{.callout-important}
+## Exercise 2
+What do you think about this annotation? Do you identify potentially relevant biological structures? How are these isolated above in the calculated clusters and spatial domains? 
+:::
+
+:::{.callout-tip collapse="true"}
+### Answer
+
+Let's compare to the Leiden cluster for example:
+```{r}
+tab_prop <- prop.table(table(sfe$Leiden, sfe$SingleR_label), margin = 1)
+## For display: round and remove 0s
+num_mat <- round(tab_prop, 2)
+num_mat[num_mat == 0] <- ""
+
+## Annotation colors
+group_df = data.frame(row.names = colnames(tab_prop), SingleR_label=colnames(tab_prop))
+ann_colors = list(
+  SingleR_label = setNames(object = brewer.pal(9, "Set1"), colnames(tab_prop)))
+
+pheatmap(
+  tab_prop,
+  cluster_rows = TRUE,
+  cluster_cols = TRUE,
+  color = viridis(100, option = "magma", direction = -1)[0:50],
+  display_numbers = num_mat,
+  fontsize_number = 10,
+  fontsize = 12,
+  border_color = NA,
+  main = "Leiden clusters vs. SingleR labels", 
+  annotation_col = group_df,
+  annotation_colors = ann_colors  
+)
+```
+:::

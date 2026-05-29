@@ -47,13 +47,15 @@ library(igraph)
 
 ## Load SpatialFeatureExperiment object
 
-We will start by loading the normalized `SpatialFeatureExperiment` object from the previous exercise, which contains filtered cells, and genes with at least 1 count across all retained cells.
+We will start by loading the normalized Visium HD dataset stored in the `SpatialFeatureExperiment` object generated in the previous exercise. It contains filtered cells, and genes with at least 1 count across all retained cells.
 
 ```{r}
 # Reload the SpatialFeatureExperiment object if not in the R session already
 sfe <- readObject("results/day2/02.1_sfe/")
 sfe
 ```
+
+*NOTE*: Feel free to use the normalized Xenium dataset, and compare your results to the others.
 
 ## Feature Selection
 
@@ -345,5 +347,5 @@ If you tried different parameters for Banksy, how does it affect the UMAP result
 ## Save data for later
 
 ```{r}
-alabaster.sfe::saveObject(sfe, "results/day1/02.2_sfe")
+alabaster.sfe::saveObject(sfe, "results/day2/02.2_sfe")
 ```
