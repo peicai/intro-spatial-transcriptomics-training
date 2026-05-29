@@ -160,8 +160,7 @@ We save the normalized Visium HD object for downstream exercises.
 
 ```{r}
 dir.create("results/day2", showWarnings = FALSE, recursive = TRUE)
-
-alabaster.sfe::saveObject(sfe, "results/day1/02.1_sfe")
+alabaster.sfe::saveObject(sfe, "results/day2/02.1_sfe")
 ```
 
 Clear your environment:
