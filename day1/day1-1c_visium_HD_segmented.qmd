@@ -36,7 +36,6 @@ library(Voyager)
 library(VisiumIO)
 library(ggspavis)
 library(HDF5Array)
-
 library(alabaster.base)
 library(alabaster.sfe)
 ```

@@ -60,7 +60,7 @@ RUN Rscript -e 'remotes::install_version("renv", version = "1.2.2", repos="https
 RUN Rscript -e 'install.packages("xgboost", repos = c("https://dmlc.r-universe.dev", "https://cloud.r-project.org"))'
 
 # restore everything except renv and xgboost
-RUN Rscript -e 'renv::restore(exclude = c("renv")'
+RUN Rscript -e 'renv::restore(exclude = c("renv"))'
 
 EXPOSE 8787
 

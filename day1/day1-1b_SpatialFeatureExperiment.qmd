@@ -30,7 +30,7 @@ library(Voyager)
 library(ggplot2)
 library(patchwork)
 library(scuttle)
-library(sfarrow) #JUNA: needs to be installed 
+library(sfarrow)
 library(HDF5Array)
 ```
 
@@ -239,7 +239,7 @@ p_xen <- ggplot(xy, aes(x = -y, y = x, color=PIGR)) +
   theme_bw() 
 
 ## load the object from Exercise 1A
-spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_spe_")
+spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1a_spe_")
 xy <- data.frame(spatialCoords(spe), colData(spe), PIGR=counts(spe)["PIGR",] + 1)
 names(xy)[1:2] <- c("x", "y")
 p_vis <- ggplot(xy, aes(x = x, y = y, color=PIGR)) +
