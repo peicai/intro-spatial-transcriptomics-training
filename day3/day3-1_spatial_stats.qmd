@@ -4,12 +4,17 @@ editor: source
 editor_options: 
   chunk_output_type: inline
 bibliography: ../references.bib
+format:
+  html:
+    embed-resources: true
 ---
 
 ## Learning objectives
 
 - Learn the basic principles of exploratory spatial statistics
 - Compute and visualise local and global measures of spatial autocorrelation
+- Compute and interpret point pattern analysis metrics on cell-based data
+- Compute and interpret geometric measures of multicellular structures
 - Compare spatial statistics measures across samples using linear mixed models
 - This chapter is based on the `OSTA` online book chapter on spatial statistics and uses heavily the `Voyager` spatial statistics library [@moses2023voyager]
 
@@ -27,45 +32,58 @@ library("tidyr")
 library("dplyr")
 library("lme4")
 library("lmerTest")
+library("spatialFDA")
+library("scrapper")
+library("dittoSeq")
+library("sosta")
 set.seed(1234)
+```
+
+```{r}
+knitr::opts_chunk$set(cache.lazy = FALSE)
 ```
 
 ## Load data
 
 ```{r}
 # Load the SpatialExperiment objectq
-spe <- loadHDF5SummarizedExperiment(dir="results/day2", prefix="01.4_spe_")
+sfe <- loadHDF5SummarizedExperiment(dir="results/day1", prefix="01.2_sfe_")
+# set imageData to NULL as we do not need it anymore
+imgData(sfe) <- NULL
 ```
 
-In order to use the big spatial statistics library `sf` we convert the `SpatialExperiment` object into a `SpatialFeatureExperiment` object [@Moses2025.02.24.640007]. In addition to the `SpatialExperiment` object it contains simple feature categories such as `Geometries` and `Graphs`. In this 10x Visium Dataset the `Geometries` stored are the coordinates of the spots
-
-```{r}
-sfe <- toSpatialFeatureExperiment(spe)
-sfe
-```
+In spatial statistics we often compare categorical labels across space. A useful categorical label are non-spatial clusters or cell types [@aran2019reference].
 
 ## Data modalities of spatial statistics
 
 In spatial transcriptomics we differentiate between imaging-based and sequencing-based technologies which give rise to very different _data modalities_ [@rao2021exploring].  
 
-![Data Modalities in Spatial Transcriptomics [@emons2025harnessing]](https://oup.silverchair-cdn.com/oup/backfile/Content_public/Journal/nar/53/17/10.1093_nar_gkaf870/1/gkaf870fig1.jpeg?Expires=1766403187&Signature=WxVqrLv3B2ktSO5UWsRogBTtrwQeC3Ol-gM090kNJc8hAakLbV1v~BmiBJ5ae-810EciaTYjbNSvPwAGSzaWQXbh9qSOf4jjkNwJsMp2JEI77MoADpxGWvO17H4PUrzfaRlDZK82fc~Ik2GchhlLaKJvQWAMvIKEAdSwrB74D~sbAKqTL1bngu3xL-Ta4x3254JJJbSdAeHbmXH1e8jpeTTFri63iYHI3yUkhJAYhltRKwlfhCkwO2F7Hj1EcwPrTKJK~oFe2igeODcCkpnpvRqZDgAI3ImcF52nGksXGzqXQTO72RPolepCA1cVdGCcQ8K-VUjTGnsB8Ide89-gJw__&Key-Pair-Id=APKAIE5G5CRDK6RD3PGA)
+![Data Modalities in Spatial Transcriptomics [@emons2025harnessing]](https://oup.silverchair-cdn.com/oup/backfile/Content_public/Journal/nar/53/17/10.1093_nar_gkaf870/1/gkaf870fig1.jpeg?Expires=1783069626&Signature=VfVM2TBfNTmXSzsf6VyjrQAfQeWfeqIIR6L4DXj-npV22XVqy5VlrzXm9lqR4aYGtdeK4L40q04YeOeimaWAFYdLBkN2jAO9BfRry7FEGUUYGzoYqvS7kyNLFhMGjhisWUfJO~ZZ24DT8FFLSsp3Sp6HR0Zi6q9s32Hx7ZzJGlRmV9vPN-H8yHUyDM9WUy-MTZY~406LScggMkd4DjhPLldWcwjDG10CEeDcRb3qjI-q3zBk63sZLOJFiFPcH8EGyj6UMi-STQf5dnvzPAqS6AZ6ryYDOS7cPIrG0tUbrIlZSDFLL8H298XM0Q-rI9fbqZe42AScZ9vNWD1xGZo99w__&Key-Pair-Id=APKAIE5G5CRDK6RD3PGA)
 
 Our dataset was acquired using 10x Visium HD. The data modality of this technology is best described by a _regular lattice_. This means that the observations are taken at regularly spaced intervals. This is very different to imaging-based approaches where observations are due to a stochastic data generating process, which is related to some underlying biological mechanism. 
 
 With spots of 2um^2, Visium HD can provide subcellular resolution. We can segment cells from this regular lattice of pixels and approximate the cells by their centroid. This in turn can be described as an _irregular lattice_ of the cell types in space or even be analysed as a point process of the cell centroid locations. 
 
-In what follows we will focus on analysing the regular lattice of the pixel measurements with techniques from lattice data analysis.
+In what follows we will perform three types of analyses on different _spatial scales_ of the dataset. 
 
-First, we will define a neighbourhood on which we want to compute spatial statistics metrics. In 10x Visium it is very natural to consider the direct neigbours of hexagonal visium lattice. We do this with the function `Voyager::findVisiumGraph()`. 
+- i) pixel-level analysis: This is an irregular lattice and we analyse it thus with tools from lattice data analysis 
+- ii) cell-level analysis: This is a point pattern pattern of cell centroids and we will analyse it with point pattern analysis.
+- iii) multi-cellular analysis: This is a structure-based analysis which we will analyse with geometric tools.
+
+## Cell type-free analysis
+
+Lattice-based analysis is focused on comparing a numerical value of a lattice. This lattice is constructed by defining the neighbourhood of each cell. First, we will define a neighbourhood on which we want to compute spatial statistics metrics. In 10x Visium it is very natural to consider the direct neigbours of hexagonal visium lattice. We do this with the function `Voyager::findVisiumGraph()`. 
 
 ```{r}
+#| fig-width: 7
+#| fig-height: 7
 (g <- findSpatialNeighbors(sfe,
     method = "knearneigh", # wraps the spdep function with the same name
     k = 5,
     zero.policy = TRUE,
     sample_id = "all"
   ))
-plot(g, coords = spatialCoords(sfe))
+
 colGraph(sfe, "visium") <- g
 
 plotColGraph(sfe,
@@ -79,9 +97,7 @@ We notice two things:
 
 - On top of the spots we know see the hexagonal neighbourhood on top of the regular lattice. 
 
-# Univariate Analysis
-
-## Global indicators of spatial association
+### Global indicators of spatial association
 
 Now that we have defined both the neighbourhood of a spot and preprocessed the gene expression, we can turn to measures of spatial association. 
 
@@ -94,9 +110,9 @@ $$
 A very famous measure of global spatial autocorrelation is called Moran's $I$. It assess correlation of a gene with itself given a defined weight matrix $w$ [@moran1950notes]. 
 
 ::: callout-important
-## Exercise
+### Exercise
 
-- Model the variance of the log-transformed expression profiles per gene with `scran::modelGeneVar()` (using the argument `subset.row` will make the fitting faster)
+- Model the variance of the log-transformed expression profiles per gene with `scrapper::modelGeneVar()` (using the argument `subset.row` will make the fitting faster)
 - Extract the top 200 highly variable genes in this dataset with `scran::getTopHVGs()`
 - Calculate the global Moran's $I$ coefficient with the function `Voyager::runUnivariate()` on these 200 highly variable genes. You can find information and examples on how to run this function by typing `?runUnivariate` in your console
 - Extract the top 3 genes with the highest Moran's $I$ value
@@ -105,14 +121,46 @@ A very famous measure of global spatial autocorrelation is called Moran's $I$. I
 :::
 
 ::: {.callout-tip collapse="true"}
-## Answer
+### Answer
 
 First, we model the variance on a subset of the genes for computational reasons
 Then, we extract the 200 most highly variable genes
 
 ```{r}
-stats <- scran::modelGeneVar(sfe, subset.row = 1:2000)
-hvg <- scran::getTopHVGs(stats, n = 200)
+#calculate the size factors
+sf <- centerSizeFactors(colSums(assay(sfe)))
+#normalise the data
+normed <- scrapper::normalizeCounts(assay(sfe), size.factors = sf)
+logcounts(sfe) <- normed
+
+gene.var <- modelGeneVariances(logcounts(sfe), 
+                               num.threads = 1)
+# chooseHighlyVariableGenes() expects the residual variance statistics
+hvg.index <- chooseHighlyVariableGenes(gene.var$statistics$residuals, 
+                                      top = 100)
+
+#add the hvgs to the `sfe` - adapted from https://github.com/libscran/scrapper/blob/master/R/se_chooseRnaHvgs.R
+is.hvg <- logical(nrow(gene.var$statistics))
+is.hvg[hvg.index] <- TRUE
+gene.var[["hvg"]] <- is.hvg
+rowData(sfe) <- cbind(rowData(sfe), gene.var)
+#extract the gene names of the hvgs
+hvg <- rownames(sfe)[is.hvg]
+#cluster the data
+pca.out <- runPca(
+    assay(sfe, "logcounts")[is.hvg, ]
+)
+
+reducedDim(sfe, "PCA") <- t(pca.out$components)
+
+snn.graph <- buildSnnGraph(
+    pca.out$components
+)
+
+# Cluster the graph
+clust.out <- clusterGraph(snn.graph, multilevel.resolution = 0.5)
+sfe$cluster <- factor(clust.out$membership)
+table(sfe$cluster)
 ```
 
 Next, we calculate global Moran's I for these 200 genes
@@ -135,7 +183,7 @@ plotSpatialFeature(sfe, topGenes, ncol=3)
 
 ::: 
 
-## Local indicators of spatial association
+### Local indicators of spatial association
 
 In the section above, we have computed a global measure of spatial association, meaning that we get one number per field-of-view. This is an average of the local contributions and neglects the potential underlying heterogeneity completely. 
 
@@ -153,7 +201,7 @@ In the case of Moran's $I$ we will now not calculate one measure for the entire 
 :::
 
 ::: {.callout-tip collapse="true"}
-## Answer
+### Answer
 
 First, we have to calculate the metric on the first most autocorrelated genes. 
 ```{r}
@@ -166,20 +214,24 @@ sfe <- runUnivariate(sfe,
 Then, we plot the local Moran's $I$ values in space. 
 
 ```{r}
+#| fig-width: 7
+#| fig-height: 15
 plotLocalResult(sfe, "localmoran",
-                features =topGenes, ncol = 3,
+                features =topGenes, 
+                ncol = 1,
                 colGeometryName = "centroids",
-                divergent = TRUE, diverge_center = 0)
+                divergent = TRUE, 
+                diverge_center = 0)
 ```
 
 :::
 
-## Discretising regions with Moran's scatterplot
+### Discretising regions with Moran's scatterplot
 
 The continuous local Moran's $I_i$ measurements can be difficult to interpret. A simplification is Moran's scatter plot [@anselin2019moran]. The idea is to compare the Moran's $I$ of the spot $i$ itself with its neighbours $j$. Like this we obtain four options: high $I_i$ next to neighbours that have high $I_j$, high $I_i$ next to neighbours that have low $I_j$ etc. This separates outliers (high-low and low-high) from values within more homogeneous regions (high-high and low-low).
 
 ::: callout-important
-## Bonus Exercise
+### Bonus Exercise
 
 - Calculate Moran's scatterplot with `runUnivariate` on the top three global Moran's $I$ genes from above
 
@@ -188,7 +240,7 @@ The continuous local Moran's $I_i$ measurements can be difficult to interpret. A
 :::
 
 ::: {.callout-tip collapse="true"}
-## Answer
+### Answer
 
 First, we have to calculate the metric on the first three most variable hvgs. 
 ```{r}
@@ -210,64 +262,258 @@ moranPlot(sfe, topGenes[1], graphName = "visium", swap_rownames = "symbol") + th
 The grey dashed lines indicate the mean expreession of the "PIGR" expression in the spots themselves and among their neighbours. According to to these means the spots are categorised into 4 categories, which can be plotted back in space. We notice that there is quite part of the tissue that constitute as "high-high" for all three genes in the same region (bottom left).
 
 ```{r}
+#| fig-width: 7
+#| fig-height: 15
 plotLocalResult(
     sfe,
     name = "localmoran",
     features = topGenes,
+    ncol = 1,
     attribute = "mean",
+    colGeometryName = "centroids"
+)
+```
+
+we can also filter on the p-values for non-significant cells 
+```{r}
+localResults(sfe)[["localmoran"]][["PIGR"]]<- 
+  localResults(sfe)[["localmoran"]][["PIGR"]] |>
+  mutate(locClust = ifelse(`-log10p_adj` > -log10(0.05), as.character(mean), "non-siginificant"))
+```
+
+```{r}
+#| fig-width: 7
+#| fig-height: 7
+plotLocalResult(
+    sfe,
+    name = "localmoran",
+    features = "PIGR",
+    ncol = 1,
+    attribute = "locClust",
     colGeometryName = "centroids"
 )
 ```
 
 :::
 
-# Multivariate Analysis
+## Cell type-based analysis
 
-All of the analyses we showed above, were univariate comparison. Moran's $I$ and other association measures have also bivariate and even multivariate variants. 
-
-::: callout-important
-## Question
-
-- Which type of biological question do you think would be nicely addessed with e.g. a bivariate spatial association measure? 
-
-:::
-
-::: {.callout-tip collapse="true"}
-## Answer
-
-One potentially interesting set of questions one could answer with bivariate spatial association measures are ligand-receptor interactions. 
-
-::: 
-
-::: callout-important
-## Bonus Exercise
-
-- Calculate a bivariate Moran's $I$ for the genes `PIGR` and `CLCA1` using the function `Voyager::runBivariate()`
-
-:::
-
-::: {.callout-tip collapse="true"}
-## Answer
+In the cell-based analysis chapter we will compare the distribution of categorical cell types in space using point pattern analysis. Let us first plot the cell types in space
 
 ```{r}
-sfe <- runBivariate(sfe, type = "localmoran_bv",
-                    feature1 = "PIGR", feature2 = "CLCA1",
-                    colGraphName = "visium",
-                    nsim = 499)
+#| fig-width: 10
+#| fig-height: 10
+plotSpatialFeature(sfe, 
+    features="cluster",
+    colGeometryName="centroids",
+    size = 1) +
+    guides(col=guide_legend(override.aes=list(size=2)))
+```
+
+### Point pattern analysis
+
+Next, we will compute a measure of spatial correlation across scales for all pairwise cell type combinations called Ripley's cross $K$ function using the R/Bioconductor package `spatialFDA` [@emons2026differential; @emons2025harnessing]. Ripley's cross $K$ function is defined as [@baddeley2016spatial]. 
+
+$$
+K(r) = \frac{1}{\lambda_j} \mathbb{E} [t(u,r,X^{j}) \mid u \in X^{i}],
+$$
+
+Ripley's cross $K$ function can be variance stabilised, which is then called Besag's cross $L$ [@baddeley2016spatial]. This is the measure we will compute for our dataset. 
+
+$$
+L(r) = \sqrt{\frac{K(r)}{\pi}}
+$$
+
+We will focus on three cell types to make the results more interpretable
+
+```{r}
+resCross <- calcCrossMetricPerFov(
+  sfe,
+  correction = "iso",
+  selection = c(1,2,3),
+  subsetby = "sample_id",
+  fun = "Lcross", marks = "cluster",
+  rSeq = seq(0, 100, length.out = 100), by = c("sample_id"),
+  ncores = 1
+)
 ```
 
 ```{r}
-plotLocalResult(sfe, "localmoran_bv", 
-                features = localResultFeatures(sfe, "localmoran_bv"),
-                ncol = 2, divergent = TRUE, diverge_center = 0,
-                colGeometryName = "centroids") 
+#| fig-width: 15
+#| fig-height: 10
+plotCrossMetricPerFov(
+  resCross,
+  theo = TRUE,
+  correction = "iso",
+  x = "r",
+  imageId = 'sample_id'
+)
 ```
 
-We notice that there is one region showing high bivariate Moran's I. This is also the region where both univariate Moran's I scatterplot values were "high-high". The regions which were classified "high-high" individually for each gene do not show up here.
+::: callout-important
+### Exercise
+What do you learn from these plots in combination with the distribution of cell types in space above? 
+:::
 
-::: 
+::: {.callout-tip collapse="true"}
+### Answer
+We note a few things:
 
-# Bonus: Multi-sample Analysis
+- All cells cluster among themselves and across scales (the diagonal of the plot)
+- All cells show spacing (below the dashed line) of radii $r$ smaller than 15 $\mu$m $\rightarrow$ cell diameter
+- Immune cells build aggregates
+- Epithelial cells show spacing in comparison to immune cells. 
+:::
+
+## Multicellular analysis
+
+### Reconstruction of the tumor region
+
+Next we will continue with multicellular analysis. The R/Bioconductor package `sosta` is designed for structure-based analysis of multicellular anatomical structures. For example in spatial omics, "structures" could be germinal centers (GCs) in the tonsil, metastases or tertiary lymphoid structures (TLS) in cancer [@gunz2025analysis].
+
+In `sosta` the reconstruction of anatomical structures is based on the density profile of a marked point pattern. Based on an estimated threshold of the density profile the structures are segmented.
+
+First, we will have a look at the point pattern intensity of the mark of interest.mThe histogram shows the distribution of intensity values of the pixel image on the left.
+
+```{r}
+# Some of the later functions need to have an colData column with a image name identifier.
+# We will define this here.
+sfe$imageName <- "image1"
+
+# Let us first look
+shapeIntensityImage(
+    sfe,
+    marks = "cluster",
+    markSelect = "1"
+)
+```
+
+We can use the following function to segment the tumor region. The result is an `sf` polygon. Internally the functions estimate the bandwidth of the smoothing kernel (`bndw`) and the intensity threshold (`thres`) based on the distribution showed above.
+
+```{r}
+tumor <- reconstructShapeDensitySPE(
+  sfe,
+  marks = "cluster",
+  markSelect = "1",
+  imageCol = "imageName"
+)
+```
+
+We can directly plot the resulting polygon using `geom_sf`. Note that the argument `inherit.aes = FALSE` is important for the function to work correctly.
+
+```{r}
+plotSpatialFeature(sfe, features="cluster", colGeometryName="centroids") +
+    guides(col=guide_legend(override.aes=list(size=3)))+
+    geom_sf(data = tumor, fill = NA, color = "black", linewidth = 0.75, inherit.aes = FALSE,)
+```
+::: callout-important
+
+### Exercise
+Do you think this is a good reconstruction / segmentation?
+:::
+
+::: {.callout-tip collapse="true"}
+### Answer
+Overall the segmentation seems to be fine. However, we note a few things:
+1. There are very small regions with a few cells present.
+2. There might be some under-segmentation, i.e. there are a lot of XXX cells included in the tumor regions.
+In general, the *correct* segmentation depends heavily on the research questions.
+:::
+
+### Cell-based analysis
+
+For later analyses we will assign the cells to each tumor region.
+
+```{r}
+# Define unique colnames by numbering the cells
+colnames(sfe) <- paste0("cell_", c(1:dim(sfe)[2]))
+assign <- assingCellsToStructures(sfe, tumor, imageCol = "imageName")
+
+# Assign using the correct order of the columns in the spe object
+sfe$tumorAssign <- assign[colnames(sfe)]
+```
+
+### Distance to tumor border
+
+We can now find the distance to the closest structure / tumor boundary using the function `minBoundaryDistances`. As the function is defined to work with multiple samples, we have to give the `imageCol` that we defined above.
+
+```{r}
+sfe$minDist <- minBoundaryDistances(
+    spe = sfe, imageCol = "imageName",
+    structColumn = "tumorAssign", allStructs = tumor
+)
+```
+
+Again, we can plot the result. Note that we have boundary effects due to the FOV, cells that are close to the field-of-view boundary might actually be deep inside the tumor.
+
+```{r}
+plotSpatialFeature(sfe, features="minDist", colGeometryName="centroids") +
+  scale_colour_gradient2(low = "darkred", high = "navy",)
+```
+We can now visualize the density distribution with respect to the tumor borders in a violin plot. Negative values correspond to cells within a tumor structure. 
+
+```{r}
+cluster_levels <- levels(factor(colData(sfe)$cluster))
+cluster_colors <- setNames(unname(dittoColors())[seq_along(cluster_levels)], cluster_levels)
+
+colData(sfe) |>
+  as.data.frame() |>
+  mutate(cluster = reorder(cluster, minDist, FUN = median)) |>
+  ggplot(aes(x = minDist, y = cluster, fill = cluster)) +
+  geom_violin() +
+  theme_bw() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  scale_fill_manual(values = cluster_colors)
+```
+::: callout-important
+### Exercise
+What do you notice?
+:::
+
+::: {.callout-tip collapse="true"}
+### Answer
+Interestingly, the cell type XXX is almost exclusively within the tumor regions. XXX is very close to the border. Again this depends on the parameters and the definition of the *correct* segementation.
+:::
+
+#### Cell- type proportions
+
+Next, we look at the cell type proportions in each tumor region.
+
+```{r}
+sel <- colData(sfe) |>
+  as.data.frame() |>
+  count(tumorAssign) |>
+  filter(!is.na(tumorAssign), n > 10) |> # select regions with at least 10 cells
+  pull(tumorAssign)
+```
+
+
+```{r}
+df <- colData(sfe) |>
+  as.data.frame() |>
+  filter(tumorAssign %in% sel) |>
+  count(tumorAssign, cluster)
+
+p0 <- ggplot(df, aes(reorder(tumorAssign, n),
+                     x = n, fill = cluster)) +
+  theme_bw() +
+  scale_fill_manual(values = unname(dittoColors()))
+p1 <- p0 +
+  geom_col(position = "identity") +
+  labs(x = "# cells", y = "region")
+p2 <- p0 +
+  geom_col(position = "fill") +
+  labs(x = "% cells", y = "region")
+
+patchwork::wrap_plots(p1, p2, guides = "collect")
+```
+
+Parts of the multi-cellular section were adapted from the following [vignette](https://helenalc.github.io/SpatialData.demo/code/csama.html).
+
+## Additional Material
+
+::: {.callout-tip collapse="true"}
+# Additional Material: Multi-sample analysis
 
 This chapter so far showed how to perform lattice-data analysis for one sample. Lattice data analysis is not yet very common in multi-sample analyses. 
 
@@ -278,7 +524,7 @@ First we will load 4 slides from the dataset (2 healthy slides and 2 cancerous s
 Due to conversion issues, this code creates a `SpatialFeatureExperiment` via a `SingleCellExperiment`
 
 ```{r}
-speMult <- loadHDF5SummarizedExperiment(dir="data/Human_Colon_Cancer_P1/", prefix="02.3_spe_tmp_")
+speMult <- loadHDF5SummarizedExperiment(dir="data/Human_Colon_Cancer_P1/", prefix="02.3_spe_tmp")
 
 speMult$array_row <- speMult$row
 speMult$array_col <- speMult$col
@@ -287,7 +533,6 @@ colData(speMult)$sample_id |> unique()
 
 sceMult <- as(speMult, "SingleCellExperiment")
 colData(sceMult) <- colData(sceMult) |> cbind(spatialCoords(speMult))
-
 ```
 
 Next, we will convert the `SingelCellExperiment` to a `SpatialFeatureExperiment`. 
@@ -312,9 +557,11 @@ table(mt)
 # remove them
 sfeMult <- sfeMult[!mt, ]
 
-#log-normalise the counts
-sfeMult <- scuttle::logNormCounts(sfeMult)
-sfeMult
+#calculate the size factors
+sf <- centerSizeFactors(colSums(assay(sfeMult)))
+#normalise the data
+normed <- scrapper::normalizeCounts(assay(sfeMult), size.factors = sf)
+logcounts(sfeMult) <- normed
 ```
 
 Now, we notice a `logcounts` assay in our object.
@@ -330,6 +577,7 @@ allGraphs <- findSpatialNeighbors(sfeMult,
   )
 
 colGraphs(sfeMult, "knn5", sample_id = "all") <- allGraphs
+sfeMult
 ```
 
 ::: callout-important
@@ -403,4 +651,93 @@ qqnorm(resid(mdl), pch = 16)
 qqline(resid(mdl))
 ```
 
+```{r}
+saveHDF5SummarizedExperiment(sfe, dir="results/day3", prefix="01.3_sfe_annotated", replace=TRUE,
+                                chunkdim=NULL, level=NULL, as.sparse=NA,
+                                verbose=NA)
+```
+
+:::
+:::
+
+::: {.callout-tip collapse="true"}
+# Additional Material: Gene expression within structures
+
+Now we will subset to only the tumor regions.
+
+```{r}
+sfe_sub <- sfe[, sfe$tumorAssign %in% sel]
+```
+
+```{r}
+# identify mitochondrial genes
+gn <- rowData(sfe_sub)$Symbol
+mt <- grepl("^MT-", gn, ignore.case = TRUE)
+table(mt)
+# remove them
+sfe_sub <- sfe_sub[!mt, ]
+```
+
+We will pseudo-bulk within each tumor and do PCA.
+
+```{r}
+# pseudo-bulk at the structure level
+agg <- aggregateAcrossCells(counts(sfe_sub), list(groups = sfe_sub$tumorAssign))
+# normalize counts
+nc <- normalizeCounts(agg$sums, size.factors = colSums(agg$sums))
+# run PCA
+pcaTum <- runPca(nc)
+```
+
+Let's look at the three top features (genes) for each principle component.
+```{r}
+# Top features for PCs 1 to 3
+apply(pcaTum$rotation[, 1:3], 2, \(.) {
+    . <- sort(., decreasing=TRUE)
+    head(names(.), 10)
+})
+```
+
+Let's look at the featres in the subset and the whole FOV.
+
+```{r}
+plotSpatialFeature(sfe_sub, c("CEACAM5", "MUC12", "COL3A1"), ncol=3)
+```
+
+```{r}
+plotSpatialFeature(sfe, c("CEACAM5", "MUC12", "COL3A1"), ncol=3)
+```
+
+::: callout-important
+### Exercise
+What do you notice?
+:::
+
+::: {.callout-tip collapse="true"}
+### Answer
+Interestingly, several top-loaded genes for these PCs are strongly associated with non-tumor cell types. This suggests that the PCA is capturing variance that is driven by non-tumor cells within the tumor regions. Because the expression to these cells deviate so drastically from the dominant pseudo-bulk tumor profile, PCA identifies them as an important axis of variation. This could either result from the over-segementation discussed above or indicate some interesting biology or infiltration patterns (as we have seen in the distance density plots). This would be interesting to investigate further.
+:::
+
+::: callout-important
+### Bonus Exercise
+Rerun the segmentation with a higher intensity threshold and rerun the PCA analysis. Do you notice a change in the top genes?
+:::
+
+::: {.callout-tip collapse="true"}
+### Answer
+To generate a more refined segmentation the intensity threshold in `reconstructShapeDensitySPE` has to be increased to around `3E-4`. The rest follow as above.
+
+```{r}
+#| eval: false
+reconstructShapeDensitySPE(
+  sfe,
+  marks = "cluster",
+  markSelect = "1",
+  imageCol = "imageName",
+  thres = 3E-4
+)
+```
+
+You should see some change, but the non tumor genes are still picked up. This further indicates that we might see an interesting biological pattern.
+:::
 :::
