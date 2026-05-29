@@ -141,7 +141,7 @@ spe_seg <- spe_seg[, spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
 
 <!--
 The slot spe_seg$map includes interesting info, which allows us to calculate the cell area for example
-```{r}
+```{r, eval=F}
 spe_seg$map |> head()
 ```
 --->
@@ -217,7 +217,7 @@ colGeometries(sfe_seg)
 <!--
 Testing import of segmentation data directly from the data/ folder instead 
 
-```{r}
+```{r, eval=F}
 geo_data <- st_read("data/segmented_outputs/cell_segmentations.geojson")
 ## Assuming the cells are in the same order
 geo_data <- geo_data[spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
@@ -254,7 +254,7 @@ Details on SpaceRanger segmentation algo: https://www.10xgenomics.com/support/so
 TO DO? 
 Julien: could be potentially nice to add the cell area, here is some code inspired from the OSTA book to do it
 
-```{r}
+```{r, eval=F}
 # get cell area = 4um x number of 2um bins
 um2 <- 4*sapply(sfe_seg$map, nrow) 
 sfe_seg$um2 <- um2
@@ -269,7 +269,7 @@ sfe_seg$nuc_um2 <- sfe_seg$um2*sfe_seg$nuc
 ```
 
 But see below, it's simpler to calculate the area from the geometry directly anyway 
-```{r}
+```{r, eval=F}
 st_area(colGeometries(sfe_seg)[["cellSeg"]]) |> head()
 plot(st_area(colGeometries(sfe_seg)[["cellSeg"]]), sfe_seg$um2)
 ## just a scaling factor, from um^2 to pixels (?)
@@ -279,7 +279,7 @@ plot(st_area(colGeometries(sfe_seg)[["cellSeg"]]), colSums(counts(sfe_seg)), log
 ```
 
 TO DO: Maybe simpler to import directly to SFE with function from SpatialFeatureExperiment package?
-```{r}
+```{r, eval=F}
 sfe3 <- readVisiumHD(data_dir="data/", use_cellseg = TRUE, unit = "full_res_image_pixel")
 ## TO DO: uniquifyFeatureNames, etc
 
