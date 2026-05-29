@@ -198,13 +198,16 @@ In order to manipulate the segmentation in an easier way, we create a `SpatialFe
 sfe_seg <- toSpatialFeatureExperiment(spe_seg)
 colGeometries(sfe_seg)
 
-## Extract cell segmentation boundaries from the metadata
+## Extract cell segmentation boundaries from the metadata. 
 seg <- metadata(sfe_seg)$cellseg
-rownames(seg) <- seg$cell_id
+## This was not subsetted to the ROI so we need to do the filtering. The cells are in the same order as the initial unfiltered SpatialExperiment
+seg_coords <- st_coordinates(st_centroid(seg))
 
-## Sort the segmentation similar to the order of cells in the SpatialFeatureExperiment object
-i <- match(colnames(sfe_seg), rownames(seg))
-seg <- seg[i, ]
+seg <- seg[seg_coords[, 1] >= roi_visium[["xmin"]] &
+             seg_coords[, 1] <= roi_visium[["xmax"]] &
+             seg_coords[, 2] >= roi_visium[["ymin"]] &
+             seg_coords[, 2] <= roi_visium[["ymax"]], ]
+rownames(seg) <- colnames(sfe_seg)
 
 ## Add the geometry to the object
 colGeometries(sfe_seg)[["cellSeg"]] <- seg

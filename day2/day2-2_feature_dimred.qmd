@@ -146,12 +146,19 @@ set.seed(123)
 sub <- nnSVG(sub) 
 ```
 
+<!-- 
+This took 4 minutes to run on my laptop 
+
+TO DO: run in on the list of random HVGs, otherwise all 20 top HVGs are also SVGs...
+-->
+
 ::: callout-important
 #### Exercise 3b
 Inspect the nnSVG output stored in `rowData(sub)`. 
 
 - What do the result columns represent? 
-- Select the top SVGs detected by `nnSVG`.
+- Select the top SVGs detected by `nnSVG`, what do you notice?
+- Bonus: rerun `nnSVG` on a subset of randomly chosen HVGs
 :::
 
 ::: {.callout-tip collapse="true"}
