@@ -37,7 +37,7 @@ library(bluster)
 library(escheR) 
 library(pheatmap)
 library(HDF5Array) 
-library(alabaster)
+library(alabaster.sfe)
 library(ggspavis)
 library(nnSVG)
 library(Banksy)
@@ -60,24 +60,25 @@ sfe
 
 Similar to scRNA-seq analysis, feature selection is a crucial step to focus on genes that are most likely to show significant biological variation across cells, and thus increase the signal to noise ratio. We typically aim at focusing on "Highly Variable Genes" (HVGs) as these are more likely to distinguish different cell types or spatial domains.
 
-In order to identify HVGs, we will first model the gene variance using a Poisson noise model with `scran::modelGeneVarByPoisson()`
+In order to identify HVGs, we will first model the gene variance using a Poisson-noise model with `scran::modelGeneVarByPoisson()`
+
+*NOTE*: this function will soon be deprecated in favor of the faster `scrapper::chooseRnaHvgs.se()`
 
 ```{r}
 # Model gene variance to identify highly variable genes.
 # This function fits a mean-variance trend to the log-normalized counts.
-sfe <- scrapper::chooseRnaHvgs.se(sfe, top=1000)
-
-## All information is stored in rowData. Have a look a the new columns added
-rowData(sfe)
-
-## Sort by residual variance, i.e., likely the biological variance
-rowData(sfe) |> as_tibble() |> dplyr::arrange(desc(residuals))
+dec <- modelGeneVarByPoisson(sfe)
+## Sort by biological variance
+dec <- dec[order(dec$bio, decreasing = T), ]
 
 # Visualize the mean-variance relationship and the fitted trend.
 # This plot helps to understand how gene variability changes with expression level.
-plot(rowData(sfe)$means, rowData(sfe)$variances, col=factor(rowData(sfe)$hvg), 
-     xlab = "Mean expression (log-counts)", ylab = "Total variance (log-counts)", main = "Mean-Variance Trend")
-curve(approxfun(rowData(sfe)$means, rowData(sfe)$fitted)(x), col="dodgerblue", add=TRUE)
+plot(dec$mean, dec$total,
+  xlab = "Mean expression (log-counts)",
+  ylab = "Total variance (log-counts)",
+  main = "Mean-Variance Trend"
+)
+curve(metadata(dec)$trend(x), add = TRUE, col = "dodgerblue", lwd = 2)
 ```
 
 ::: callout-important
@@ -89,11 +90,8 @@ Once we have modeled the gene variance, we can proceed to select the top HVGs.
 For demonstration purposes, we will visualize the expression patterns of the top 6 HVGs on the tissue slide. We exclude the mitochondrial genes, since those genes tend to be highly variable but do not provide much information about cell types or spatial domains.
 
 ```{r}
-# identify mitochondrial genes
-is.mito <- rownames(sfe)[grepl("^MT-", rownames(sfe))]
-
 # Top 6 HVGs
-top_HVG <- row.names(sfe)[order(rowData(sfe)$residuals, decreasing = TRUE)][1:6]
+top_HVG <- row.names(dec[!row.names(dec) %in% is.mito, ])[1:6]
 top_HVG
 
 # Create a plot to visualize the logcounts expression for each gene in top_HVG
@@ -109,10 +107,13 @@ For downstream analysis, we use the defined larger group of HVG, see the list in
 
 ```{r}
 # Select the top 1000 highly variable genes.
-hvg <- row.names(sfe)[rowData(sfe)$hvg]
+hvg <- getTopHVGs(dec, n = 1000) 
+
+# Store HVG information in rowData
+rowData(sfe)$hvg <- rowData(sfe)$Symbol %in% hvg
 
 # Display the range of biological variation for the selected HVGs
-rowData(sfe)$residuals[rowData(sfe)$hvg] |> summary()
+dec[rownames(sfe)[rowData(sfe)$hvg], ]$bio |> summary()
 ```
 
 ### Spatially Variable Genes (SVGs)
@@ -139,18 +140,18 @@ How would you define the spatial expression patterns of these genes in compariso
 
 *NOTE*: `nnSVG` is quite slow to run, so we will launch it only on the top HVGs. While it is running, take a look at the [nnSVG paper](https://www.nature.com/articles/s41467-023-39748-z) and the [package vignette](https://bioconductor.org/packages/devel/bioc/vignettes/nnSVG/inst/doc/nnSVG.html) to better understand how the method works, including its handling of covariates and multiple samples.
 
+We will launch it on a small subset of the HVGs 
 ```{r day2-2-svg-feature-set-signatures-4}
-select_HVG <- row.names(sfe)[order(rowData(sfe)$residuals, decreasing = TRUE)][1:20]
-sub <- sfe[select_HVG, ]
+set.seed(123)
+random_HVG <- sample(row.names(sfe)[rowData(sfe)$hvg], size = 20)
 
+sub <- sfe[random_HVG, ]
 set.seed(123)
 sub <- nnSVG(sub) 
 ```
 
 <!-- 
 This took 4 minutes to run on my laptop 
-
-TO DO: run in on the list of random HVGs, otherwise all 20 top HVGs are also SVGs...
 -->
 
 ::: callout-important
@@ -158,8 +159,7 @@ TO DO: run in on the list of random HVGs, otherwise all 20 top HVGs are also SVG
 Inspect the nnSVG output stored in `rowData(sub)`. 
 
 - What do the result columns represent? 
-- Select the top SVGs detected by `nnSVG`, what do you notice?
-- Bonus: rerun `nnSVG` on a subset of randomly chosen HVGs
+- Select the top SVGs detected by `nnSVG`, what do you notice? Are all HVGs also SVGs?
 :::
 
 ::: {.callout-tip collapse="true"}
