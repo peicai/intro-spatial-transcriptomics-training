@@ -61,6 +61,7 @@ In this exercise we will work with **Visium HD** data and focus on the "binned o
 
 
 ```{r day1-1a-SpatialExperiment-4}
+# Define region of interest (roi)
 roi_visium <- c(
   xmin = 49000,
   xmax = 58000,
@@ -70,20 +71,11 @@ roi_visium <- c(
 roi_visium
 ```
 
-*Note 1*: the [OSTA book](https://lmweber.org/OSTA/) uses the following (smaller) region of interest from the same slide:
 
-```{r day1-1a-SpatialExperiment-3}
-osta_roi_visium <- c(
-  xmin = 54000,
-  xmax = 58000,
-  ymin = 12000,
-  ymax = 16000
-)
-osta_roi_visium
-```
+*Note*: In `Exercise 1B` we focus on the matching Xenium dataset from a serial section of the same P2CRC sample, subsetted to an approximately matching region of interest.
 
-*Note 2*: In `Exercise 1B` we focus on the matching Xenium dataset from a serial section of the same P2CRC sample, subsetted to an approximately matching region of interest.
 
+Download P2 Visium HD data:
 
 ```{r day1-1a-SpatialExperiment-5}
 options(timeout = 600)
@@ -107,9 +99,10 @@ if (!dir.exists("data/Human_Colon_Cancer_P2/")) {
 }
 ```
 
-We will import the 16 um binned Visium HD output into a `SpatialExperiment` object and then subset it to the region of internet. The coordinates are in the native Visium HD image coordinate system returned by `spatialCoords()`.
+We will first import the 16 um binned Visium HD output into a `SpatialExperiment` object:
 
 ```{r day1-1a-SpatialExperiment-6}
+# Import data into a SpatialExperiment object
 spe <- TENxVisiumHD(
   spacerangerOut = "data/Human_Colon_Cancer_P2/",
   processing = "filtered",
@@ -119,11 +112,22 @@ spe <- TENxVisiumHD(
 ) |>
   import()
 
+# Use unique Symbol for rownames
 rownames(spe) <- uniquifyFeatureNames(
   ID = rowData(spe)$ID,
   names = rowData(spe)$Symbol
 )
 
+spe
+```
+
+Then, we will subset it to the region of interest. The coordinates are in the native Visium HD image coordinate system returned by `spatialCoords()`.
+
+```{r day1-1a-SpatialExperiment-7}
+# Explore the spatial coordinates
+head(spatialCoords(spe))
+
+# Subset to the region of interest based on spatial coordinates
 spe <- spe[, spatialCoords(spe)[, 1] >= roi_visium[["xmin"]] &
   spatialCoords(spe)[, 1] <= roi_visium[["xmax"]] &
   spatialCoords(spe)[, 2] >= roi_visium[["ymin"]] &
@@ -131,6 +135,8 @@ spe <- spe[, spatialCoords(spe)[, 1] >= roi_visium[["xmin"]] &
 
 spe
 ```
+
+
 
 ::: callout-important
 ## Exercise 1
@@ -191,14 +197,14 @@ Questions:
 
 The slot `colData` contains metadata for each spatial bin:
 
-```{r day1-1a-SpatialExperiment-7}
+```{r day1-1a-SpatialExperiment-8}
 colData(spe) |> head()
 ncol(spe)
 ```
 
 We can check whether bins are covered by tissue:
 
-```{r day1-1a-SpatialExperiment-8}
+```{r day1-1a-SpatialExperiment-9}
 colData(spe) |>
   as.data.frame() |>
   group_by(in_tissue) |>
@@ -209,14 +215,14 @@ colData(spe) |>
 
 The slot `rowData` contains gene metadata:
 
-```{r day1-1a-SpatialExperiment-9}
+```{r day1-1a-SpatialExperiment-10}
 rowData(spe) |> head()
 nrow(spe)
 ```
 
 The assay stores the UMI counts matrix:
 
-```{r day1-1a-SpatialExperiment-10}
+```{r day1-1a-SpatialExperiment-11}
 assay(spe)
 class(assay(spe))
 ```
@@ -225,25 +231,25 @@ The `DelayedArray` class allows to store out-of-memory representations of count 
 
 The `reducedDims` slot is empty at this stage:
 
-```{r day1-1a-SpatialExperiment-11}
+```{r day1-1a-SpatialExperiment-12}
 reducedDims(spe)
 ```
 
 The `spatialCoords` slot stores image coordinates for each bin:
 
-```{r day1-1a-SpatialExperiment-12}
+```{r day1-1a-SpatialExperiment-13}
 spatialCoords(spe) |> head()
 ```
 
 The `imgData` slot lists the linked tissue image and scale factor:
 
-```{r day1-1a-SpatialExperiment-13}
+```{r day1-1a-SpatialExperiment-14}
 imgData(spe)
 ```
 
 The image can be exported as a raster:
 
-```{r day1-1a-SpatialExperiment-14}
+```{r day1-1a-SpatialExperiment-15}
 imgRaster(spe) |> plot()
 ```
 :::
@@ -252,13 +258,13 @@ imgRaster(spe) |> plot()
 
 To get a visual overview, we use `plotVisium()` function from the `ggspavis` package. First we plot the tissue image without bins:
 
-```{r day1-1a-SpatialExperiment-15}
+```{r day1-1a-SpatialExperiment-16}
 plotVisium(spe, spots = FALSE)
 ```
 
 Then we overlay the 16 um bins to see which part of the tissue was covered by the array:
 
-```{r day1-1a-SpatialExperiment-16}
+```{r day1-1a-SpatialExperiment-17}
 plotVisium(spe, point_shape = 22, point_size = 0.5)
 ```
 
@@ -271,12 +277,12 @@ Why do we see only a specific region of the slide?
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-The full Visium HD output is much larger than needed for this introductory exercise. At the start of this exercise, we subsetted the object to one representative tissue region so that it remains fast to plot and process. This same region is also used as the anchor for selecting a comparable Xenium region in `Exercise 1B`.
+The full Visium HD output is much larger than needed for this introductory exercise. At the start of this exercise, we subsetted the object to one representative tissue region so that it remains fast to plot and process.
 :::
 
 It is possible to colour bins according to a gene or a column in `colData`, for example `PIGR`. We renamed the rows to gene symbols after import, which is why we can refer to this marker as `"PIGR"` rather than by its Ensembl ID. At this stage we plot the number of UMIs since log-normalized counts will be introduced later in the course.
 
-```{r day1-1a-SpatialExperiment-17}
+```{r day1-1a-SpatialExperiment-18}
 #| warning: false
 
 plotVisium(spe,
@@ -301,7 +307,7 @@ In which slot is `array_row` stored, and what does it represent?
 
 The column `array_row` is stored in `colData`. It represents the row position of each bin in the Visium HD grid, so the plot shows a smooth coordinate gradient across the selected region. This is technical spatial metadata, not a gene expression pattern.
 
-```{r day1-1a-SpatialExperiment-18}
+```{r day1-1a-SpatialExperiment-19}
 plotVisium(
   spe,
   annotate = "array_row",
@@ -324,7 +330,7 @@ How many bins were present in `spe`, and how many are left after selecting bins 
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-```{r day1-1a-SpatialExperiment-19}
+```{r day1-1a-SpatialExperiment-20}
 table(colData(spe)$in_tissue) 
 ## all spots, although it's clear that some do not overlap the tissue...
 
@@ -352,7 +358,7 @@ We save the filtered `SpatialExperiment` object for the next steps. Remember tha
 ```{r day1-1a-SpatialExperiment-21}
 dir.create("results/day1", showWarnings = FALSE, recursive = TRUE)
 saveHDF5SummarizedExperiment(spe,
-  dir = "results/day1", prefix = "01.1_spe_", replace = TRUE,
+  dir = "results/day1", prefix = "01.1a_spe_", replace = TRUE,
   chunkdim = NULL, level = NULL, as.sparse = NA,
   verbose = NA
 )
