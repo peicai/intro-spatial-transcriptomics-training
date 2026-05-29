@@ -51,6 +51,8 @@ library(scuttle)
 library(HDF5Array)
 ```
 
+<!-- TO DO: check here and in other qmd which packages are required -->
+
 ## Data for the course
 
 We will work on a human colorectal cancer study by [Oliveira _et al_](https://www.nature.com/articles/s41588-025-02193-3). The dataset contains normal adjacent tissue (NAT) and colorectal carcinoma (CRC) from 5 patients. We will focus on data from a patient called "P2", available from the [10X website](https://www.10xgenomics.com/datasets/visium-hd-cytassist-gene-expression-libraries-of-human-crc). 
