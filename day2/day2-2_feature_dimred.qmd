@@ -91,7 +91,7 @@ For demonstration purposes, we will visualize the expression patterns of the top
 
 ```{r}
 # Top 6 HVGs
-top_HVG <- row.names(dec[!row.names(dec) %in% is.mito, ])[1:6]
+top_HVG <- row.names(dec)[1:6]
 top_HVG
 
 # Create a plot to visualize the logcounts expression for each gene in top_HVG
