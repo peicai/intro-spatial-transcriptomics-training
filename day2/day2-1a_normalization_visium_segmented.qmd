@@ -36,6 +36,7 @@ library(scater)
 library(HDF5Array)
 library(ggspavis)
 library(alabaster.sfe)
+library(Voyager)
 ```
 
 ## Load the Visium HD object
