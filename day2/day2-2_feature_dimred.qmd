@@ -37,6 +37,7 @@ library(bluster)
 library(escheR) 
 library(pheatmap)
 library(HDF5Array) 
+library(alabaster)
 library(ggspavis)
 library(nnSVG)
 library(Banksy)
@@ -49,7 +50,7 @@ We will start by loading the normalized `SpatialFeatureExperiment` object from t
 
 ```{r}
 # Reload the SpatialFeatureExperiment object if not in the R session already
-sfe <- alabaster.base::readObject("results/day1/01.2_sfe_visium/")
+sfe <- readObject("results/day1/01.2_sfe_visium/")
 sfe
 ```
 
