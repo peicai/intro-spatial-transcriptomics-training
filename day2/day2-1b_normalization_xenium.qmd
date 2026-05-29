@@ -56,6 +56,10 @@ sfe
 
 The Xenium object starts with raw counts. Some segmented cells may have zero counts for this targeted panel in the selected region. These cells cannot receive positive size factors, so we remove them before log-normalization.
 
+We use the `scuttle::logNormCounts()` function to compute size factors and add a `logcounts` assay.
+
+*NOTE:* This function will deprecate soon and replaced by the faster `scrapper::normalizeRnaCounts.se()` function.
+
 ```{r}
 assayNames(sfe)
 
@@ -64,7 +68,7 @@ table(cell_totals == 0)
 
 sfe <- sfe[, cell_totals > 0]
 
-sfe <- scrapper::normalizeRnaCounts.se(sfe)
+sfe <- logNormCounts(sfe)
 
 assayNames(sfe)
 summary(sizeFactors(sfe))
