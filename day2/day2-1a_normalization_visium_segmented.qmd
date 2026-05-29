@@ -50,11 +50,13 @@ sfe
 
 ## Log-normalization
 
-The object contains raw counts. We use `scrapper::normalizeRnaCounts.se()`, a faster replacement for the `scuttle::logNormCounts()` function to compute size factors and add a `logcounts` assay.
+The object contains raw counts. We use the `scuttle::logNormCounts()` function to compute size factors and add a `logcounts` assay.
+
+*NOTE:* This function will deprecate soon and replaced by the faster `scrapper::normalizeRnaCounts.se()` function.
 
 ```{r}
 assayNames(sfe)
-sfe <- scrapper::normalizeRnaCounts.se(sfe)
+sfe <- logNormCounts(sfe)
 ```
 
 ::: callout-important
