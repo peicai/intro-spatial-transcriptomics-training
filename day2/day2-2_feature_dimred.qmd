@@ -161,7 +161,7 @@ Inspect the nnSVG output stored in `rowData(sub)`.
 res_nnSVG <- rowData(sub) 
 res_nnSVG <- res_nnSVG[order(res_nnSVG$pval), ]
 head(res_nnSVG)
-top_nnSVG <- res_nnSVG$gene_name[seq_len(3)]
+top_nnSVG <- res_nnSVG$Symbol[seq_len(6)]
 ```
 
 The main output is in `rowData` of the `SpatialExperiment` object, which includes: the likelihood ratio statistic (`LR_stat`), the gene’s rank based on this statistic (`rank`), raw p-values from a chi-squared test with 2 degrees of freedom (`pval`), p-values adjusted for multiple testing (`padj`), and the estimated effect size (`prop_sv`), defined as the proportion of spatial variance relative to total variance.

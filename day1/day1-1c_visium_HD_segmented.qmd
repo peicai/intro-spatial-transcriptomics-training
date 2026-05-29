@@ -199,7 +199,8 @@ sfe_seg <- toSpatialFeatureExperiment(spe_seg)
 colGeometries(sfe_seg)
 
 ## Extract cell segmentation boundaries from the metadata
-seg <- metadata(spe_seg)$cellseg
+seg <- metadata(sfe_seg)$cellseg
+seg$cell_id <- colnames(sfe_seg)
 rownames(seg) <- seg$cell_id
 
 ## Sort the segmentation similar to the order of cells in the SpatialFeatureExperiment object
