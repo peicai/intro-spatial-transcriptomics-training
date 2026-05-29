@@ -16,7 +16,7 @@ In this exercise, we normalize the filtered Visium HD object from yesterday's `E
 
 By the end of this exercise, you will be able to:
 
-- Add log-normalized values to a Visium HD `SpatialExperiment`.
+- Add log-normalized values to a Visium HD `SpatialExperiment` or `SpatialFeatureExperiment` object.
 - Inspect size factors and assay names.
 - Scale selected features for visualization and downstream multivariate methods.
 - Understand the principles of spatially-aware normalization and evaluate whether it could be useful for a given dataset.
@@ -29,6 +29,7 @@ By the end of this exercise, you will be able to:
 #| output: false
 
 library(SpatialExperiment)
+library(SpatialFeatureExperiment)
 library(scuttle)
 library(scrapper)
 library(scater)
