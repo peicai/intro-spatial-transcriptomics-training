@@ -61,7 +61,6 @@ We will start by loading our `SpatialFeatureExperiment` object, which was saved 
 sfe <- readObject("results/day1/01.1_sfe_visium/")
 ## Otherwise, quickly go through Exercise day1-1c to recreate the object
 
-
 # Identify mitochondrial genes (genes with symbol starting with "MT-")
 is.mito <- rownames(sfe)[grepl("^MT-", rownames(sfe))]
 ```
@@ -70,10 +69,14 @@ is.mito <- rownames(sfe)[grepl("^MT-", rownames(sfe))]
 Need a solution or don't delete previous object 
 --->
 
-Now, we will calculate per-cell QC metrics using the `scrapper` package. The function `quickRnaQc.se` adds QC metrics, including mitochondrial gene percentage, to the `colData` of the `SpatialFeatureExperiment` object. Run the following code to compute these metrics:
+Now, we will calculate per-cell QC metrics using the `scuttle` package. The function `addPerCellQCMetrics` adds QC metrics, including mitochondrial gene percentage, to the `colData` of the `SpatialFeatureExperiment` object. 
+
+*NOTE*: This function will soon be deprecated and replaced by a faster function in the `scrapper` package (function `quickRnaQc.se()`).
+
+Run the following code to compute these metrics:
 
 ```{r}
-sfe <- quickRnaQc.se(sfe, subsets = list(Mito = is.mito))
+sfe <- addPerCellQCMetrics(sfe, subsets = list(Mito = is.mito))
 ```
 
 ::: callout-important
@@ -92,7 +95,7 @@ colData(sfe)
 
 - The `sum` column contains the total number of unique molecular identifiers (UMIs) per cell
 - The `detected` column contains the number of unique genes detected per cell
-- The `subset.proportion.Mito` column contains the percentage of transcripts mapping to mitochondrial genes per cell
+- The `subsets_Mito_percent` column contains the percentage of transcripts mapping to mitochondrial genes per cell
 :::
 
 ### Global outlier detection
@@ -120,7 +123,7 @@ p1 <- ggcells(sfe, aes(x=detected, y=sum)) +
   ggtitle("Library size vs. detected")
 
 # Plot mito proportion vs. detected genes
-p2 <- ggcells(sfe, aes(x=detected, y=subset.proportion.Mito*100)) + 
+p2 <- ggcells(sfe, aes(x=detected, y=subsets_Mito_percent*100)) + 
   geom_point() +
   geom_density_2d() +
   scale_x_log10() +
@@ -140,7 +143,7 @@ And further check how many cells would be removed with the given thresholds:
 # Flag cells based on fixed thresholds
 sfe$qc_lib_size <- sfe$sum < 300
 sfe$qc_detected <- sfe$detected < 200
-sfe$qc_mito_prop <- sfe$subset.proportion.Mito > 0.1
+sfe$qc_mito_prop <- sfe$subsets_Mito_percent > 0.1
 
 # Tabulate number of cells flagged by each
 qc <- grep("^qc", names(colData(sfe)))
@@ -161,7 +164,7 @@ Try using more stringent cutoffs to see which cells would be excluded. What do y
 
 ```{r}
 ## Plot the metrics
-p1 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "subset.proportion.Mito") +
+p1 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "subsets_Mito_percent") +
   theme(plot.title=element_text(hjust=0.5)) +
   scale_fill_gradientn(colors=pals::jet())
 p2 <- plotSpatialFeature(sfe, colGeometryName = "cellSeg", features = "sum") +
@@ -233,7 +236,7 @@ sfe <- localOutliers(sfe,
 # Identify local outliers based on the mitochondrial gene percentage.
 # cells with an unusually high mitochondrial percentage will be flagged.
 sfe <- localOutliers(sfe,
-  metric = "subset.proportion.Mito",
+  metric = "subsets_Mito_percent",
   direction = "higher",
   log = FALSE
 )
@@ -242,7 +245,7 @@ sfe <- localOutliers(sfe,
 # A cell is considered a local outlier if it is flagged by any of the above metrics.
 sfe$local_outliers <- as.logical(sfe$sum_outliers) |
   as.logical(sfe$detected_outliers) |
-  as.logical(sfe$subset.proportion.Mito_outliers)
+  as.logical(sfe$subsets_Mito_percent_outliers)
 ```
 
 ::: callout-important
@@ -267,7 +270,7 @@ plotObsQC(sfe,
 We can visualize the spatial distribution of the local outliers together with the QC metrics, for example plot the spatial distribution of local outliers for mitochondrial percentage.
 ```{r}
 plotQCmetrics(sfe,
-  metric = "subset.proportion.Mito", outliers = "subset.proportion.Mito_outliers",
+  metric = "subsets_Mito_percent", outliers = "subsets_Mito_percent_outliers",
   point_size = 1, stroke = 0.5
 ) +
   ggtitle("Local outliers for %MT")
@@ -308,7 +311,7 @@ Very few cells seem to be flagged as outliers
 We can visualize the z-scores from the local outlier detection test and compare them to the global threshold used earlier. How do you interpret this?
 
 ```{r}
-plotObsQC(sfe, plot_type = "violin", x_metric = "subset.proportion.Mito_z", annotate = "qc_mito_prop")
+plotObsQC(sfe, plot_type = "violin", x_metric = "subsets_Mito_percent_z", annotate = "qc_mito_prop")
 ```
 
 :::{.callout-tip collapse="true"}
@@ -327,7 +330,7 @@ For the next steps we choose to:
 # adjust global filtering cutoff
 sfe$qc_lib_size <- sfe$sum < 120
 sfe$qc_detected <- sfe$detected < 100
-sfe$qc_mito_prop <- sfe$subset.proportion.Mito > 30
+sfe$qc_mito_prop <- sfe$subsets_Mito_percent > 30
 
 # compare global and local outliers being flagged
 sfe$global_outliers <- sfe$qc_lib_size | sfe$qc_detected | sfe$qc_mito_prop
@@ -363,11 +366,9 @@ Technical artifacts can arise during tissue preparation, for example tissue diss
 
 ```{r}
 # find artifacts using SpotSweeper
-sfe$subsets_Mito_sum <- colSums(counts(sfe)[is.mito, ])
-
 sfe <- tryCatch(
   findArtifacts(sfe,
-    mito_percent = "subset.proportion.Mito",
+    mito_percent = "subsets_Mito_percent",
     mito_sum = "subsets_Mito_sum",
     n_order = 5,
     name = "artifact"
@@ -396,7 +397,7 @@ Plot the spatial distribution of the `artifact` column identified by `SpotSweepe
 ```{r}
 # Plot the spatial distribution of the detected artifacts.
 plotQCmetrics(sfe,
-    metric = "subset.proportion.Mito", 
+    metric = "subsets_Mito_percent", 
     outliers = "artifact", 
     point_size = 1.1
 ) +
@@ -441,7 +442,7 @@ gc()
 :::{.callout-important}
 **Key Takeaways:**
 
--   `scrapper::quickRnaQc.se()` (anciently `scuttle::addPerCellQCMetrics`) provides essential per-bin QC metrics.
+-   `scuttle::addPerCellQCMetrics` provides essential per-cell QC metrics.
 -   `SpotSweeper::localOutliers` helps identify individual problematic cells relative to their local context.
 -   `SpotSweeper::findArtifacts` is more controversial but could in certain case be useful to detect region-level artifacts
 -   Visualizing QC results is critical for data interpretation and downstream analysis decisions.

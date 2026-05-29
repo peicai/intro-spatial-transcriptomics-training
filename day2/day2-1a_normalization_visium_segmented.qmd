@@ -35,6 +35,7 @@ library(scrapper)
 library(scater)
 library(HDF5Array)
 library(ggspavis)
+library(alabaster.sfe)
 ```
 
 ## Load the Visium HD object
@@ -43,7 +44,7 @@ We start with the filtered Visium HD object saved at the end of Exercise 2.
 
 ```{r}
 # Reload the SpatialFeatureExperiment object if not in the R session already
-sfe <- alabaster.base::readObject("results/day1/01.2_sfe_visium/")
+sfe <- readObject("results/day1/01.2_sfe_visium/")
 sfe
 ```
 
