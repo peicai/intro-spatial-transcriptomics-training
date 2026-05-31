@@ -1,5 +1,5 @@
 ---
-title: "Exercise 1C: SpatialFeatureExperiment Visium HD segmented"
+title: "Exercise 1C: SpatialFeatureExperiment - VisiumHD segmented"
 format: html
 editor: source
 editor_options:
@@ -12,8 +12,10 @@ execute:
 
 By the end of this exercise, you will be able to:
 
--  TO DEFINE
-<!-- TO DO: Adapt depending on the final data structure -->
+-  Load and manipulate Visium HD segmented data using `SpatialExperiment` and `SpatialFeatureExperiment` objects.
+- Compare the data structure and spatial coordinates of binned and segmented Visium HD data.
+- Visualize gene expression in both binned and segmented data to understand the differences in resolution and spatial representation.
+- Save and export the processed data for downstream analysis.
 
 
 ## Libraries
@@ -51,7 +53,7 @@ https://www.10xgenomics.com/datasets/visium-hd-cytassist-11mm-human-colon-cancer
 
 ## Data download 
 
-```{r day1-1c-visium_HD_segmented-3}
+```{r day1-1c-visium_HD_segmented-2}
 options(timeout = 2000)
 
 if (!dir.exists("data/segmented_outputs/")) {
@@ -95,14 +97,25 @@ if (!dir.exists("data/segmented_outputs/")) {
 
 ![Binning approach in the Visium HD segmented output data (segmented nuclei here)](../assets/images/VisiumHD_nuclei_segmentation_binning_figure1.png)
 
-One limitation is that a bin can overlap than one cell, so the assignment of the transcripts captured would be ambiguous. Of course this approach relies also on the quality of the segmentation mask. 
+One limitation is that a bin can overlap more than one cell, so the assignment of the transcripts captured would be ambiguous. Of course this approach relies also on the quality of the segmentation mask. 
 ::: 
 
-Here we will proceed in two steps:
-- We start reading the object into a `SpatialExperiment` object and subset it to the region of interest, as we have done for Visium HD binned data in the previous exercises. This allows a quick comparison of the two types of processing for the same slide
-- We then convert the object to create a `SpatialFeatureExperiment` object and add the cell segmentation information to it/
+Here we will proceed in two steps:\
+- We start reading the object into a `SpatialExperiment` object and subset it to the region of interest, as we have done for Visium HD binned data in the previous exercises. This allows a quick comparison of the two types of processing for the same slide\
+- We then convert the object to create a `SpatialFeatureExperiment` object and add the cell segmentation information to it
 
-## Import into a SpatialExperiment object and subsetting
+## Import into a SpatialExperiment object and subset
+
+```{r day1-1c-visium_HD_segmented-3}
+# Define the region of interest
+roi_visium <- c(
+  xmin = 49000,
+  xmax = 58000,
+  ymin = 7500,
+  ymax = 16000
+)
+roi_visium
+```
 
 ```{r day1-1c-visium_HD_segmented-4}
 # Read the segmented output into a SpatialExperiment object
@@ -114,6 +127,7 @@ spe_seg <- TENxVisiumHD(
 ) |>
 import()
 
+# Use unique Symbol for rownames
 rownames(spe_seg) <- uniquifyFeatureNames(
   ID = rowData(spe_seg)$ID,
   names = rowData(spe_seg)$Symbol
@@ -124,14 +138,6 @@ spe_seg
 
 ```{r day1-1c-visium_HD_segmented-5}
 # Subset to the region of interest
-roi_visium <- c(
-  xmin = 49000,
-  xmax = 58000,
-  ymin = 7500,
-  ymax = 16000
-)
-roi_visium
-
 spe_seg <- spe_seg[, spatialCoords(spe_seg)[, 1] >= roi_visium[["xmin"]] &
   spatialCoords(spe_seg)[, 1] <= roi_visium[["xmax"]] &
   spatialCoords(spe_seg)[, 2] >= roi_visium[["ymin"]] &
@@ -154,19 +160,41 @@ spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_spe_")
 ::: callout-important
 ## Exercise 2
 
-- 1. Compare the number of features and spots in the segmented and binned objects. What do you observe?
-- 2. Compare the `colData` of the two objects. What are the differences in the metadata columns? What do they represent?
-- 3. Do you observe any other differences in the content of the objects? For example, in the `rowData` or the spatial coordinates?
+Compare the elements in the colnames of the two objects, what do they represent? How many elements are there in each object?
 
 :::
 
-<!-- TO DO: Add answers -->
+::: {.callout-tip collapse="true"}
+## Answer
 
 ```{r day1-1c-visium_HD_segmented-7}
-spe_seg
+colnames(spe) |> head()
+ncol(spe)
+colnames(spe_seg) |> head()
+ncol(spe_seg)
+```
+
+The object from exercise 1A contains bin IDs, while the new object contains cell IDs. The number of bins is different from the number of cells in the segmented object, since the segmentation process  can lead to a different number of cells compared to the number of bins in the same region of interest.
+:::
+
+
+We can compare visually the spatial coordinates of the two objects: 
+
+```{r day1-1c-visium_HD_segmented-8}
 plotVisium(spe, zoom=T)
 plotVisium(spe_seg, zoom=T)
+```
 
+::: callout-important
+## Exercise 3
+
+Compare the expression of `PIGR` gene in the two objects usign the function `plotVisium()` (as previously done in exercise 1A). What do you observe? 
+:::
+
+
+::: {.callout-tip collapse="true"}
+## Answer
+```{r day1-1c-visium_HD_segmented-9}
 p_vis <- plotVisium(spe,
                     annotate = "PIGR",
                     assay = "counts",
@@ -185,15 +213,16 @@ p_vis + p_vis_seg
 
 Using visium HD segmented data allows us to have a more detailed view of the tissue, as we are not limited to the resolution of the bins. The x and y coordinates of the `SpatialExperiment` object corresponds to the centroids of the cells.
 
+:::
+
 We can also have access to the full segmentation of the cells (i.e., the boundaries of each segmented cell), but contrary to the `SpatialFeatureExperiment`, this cannot be stored natively in a slot of the `SpatialExperiment` object, so it is stored in the `metadata` of the object.
 
 ## Create a SpatialFeatureExperiment object 
 
 In order to manipulate the segmentation in an easier way, we create a `SpatialFeatureExperiment` object, which allows us to store and visualize spatial features (e.g., see the `colGeometries()` function used in Exercise 1B). We need to add the cell segmentation boundaries to the list of geometries.
 
-<!--TO DO: Adapt depending on the final order of exercises -->
 
-```{r day1-1c-visium_HD_segmented-8}
+```{r day1-1c-visium_HD_segmented-10}
 sfe_seg <- toSpatialFeatureExperiment(spe_seg)
 colGeometries(sfe_seg)
 
@@ -294,9 +323,9 @@ plot(st_area(colGeometries(sfe3)[["cellSeg"]]), colSums(counts(sfe3)), log="xy")
 
 -->
 
-We can visualize the geometries with a simple scatterplot, or these can be used in wrapper functions such as `plotSpatialFeature()` from the `Voyager` package:
+We can visualize the geometries with a simple scatterplot: 
 
-```{r day1-1c-visium_HD_segmented-9}
+```{r day1-1c-visium_HD_segmented-11}
 plot(st_geometry(colGeometries(sfe_seg)[["centroids"]]), 
      col=rep(colors(), 2), 
      pch=16)
@@ -304,7 +333,11 @@ plot(st_geometry(colGeometries(sfe_seg)[["centroids"]]),
 plot(st_geometry(colGeometries(sfe_seg)[["cellSeg"]]), 
      col=rep(colors(), 2), 
      lty=0)
+```
 
+Or these can be used in wrapper functions such as `plotSpatialFeature()` from the `Voyager` package and plot information of different features on top:
+
+```{r day1-1c-visium_HD_segmented-12}
 ## Plot the area of the cells. It's easy to calculate it from the geometry using the sf package
 sfe_seg$area <- st_area(colGeometries(sfe_seg)[["cellSeg"]])
 plotSpatialFeature(sfe_seg, 
@@ -320,10 +353,10 @@ plotSpatialFeature(sfe_seg,
 :::
 
 ::: callout-important
-## Exercise 3
+## BONUS: Exercise 3
 Plot the cell segmentation mask of very small region of interest on the slide, for example:
 
-```{r day1-1c-visium_HD_segmented-10}
+```{r day1-1c-visium_HD_segmented-13}
 roi_zoomed <- c(
   xmin = 54500,
   xmax = 55000,
@@ -337,7 +370,7 @@ What do you observe?
 ::: {.callout-tip collapse="true"}
 ## Answer
 
-```{r day1-1c-visium_HD_segmented-11}
+```{r day1-1c-visium_HD_segmented-14}
 sfe_zoomed <- sfe_seg[, spatialCoords(sfe_seg)[, 1] >= roi_zoomed[["xmin"]] &
                         spatialCoords(sfe_seg)[, 1] <= roi_zoomed[["xmax"]] &
                         spatialCoords(sfe_seg)[, 2] >= roi_zoomed[["ymin"]] &
@@ -363,11 +396,11 @@ As you could see above, the `SpatialFeatureExperiment` includes additional layer
 A nice way to save the object is to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
 
 ```{r}
-# The "cellseg" slot of the metadata is problematic, let's remove it ebcause it's now stored as colGeometry slot 
+# The "cellseg" slot of the metadata is problematic, let's remove it because it's now stored as colGeometry slot 
 metadata(sfe_seg) <- metadata(sfe_seg)[1:2]  
 
 # mkdir("results/day1")
-alabaster.sfe::saveObject(sfe_seg, "results/day1/01.1_sfe_visium")
+alabaster.sfe::saveObject(sfe_seg, "results/day1/01.1c_sfe_visium")
 fs::dir_tree("results/day1/01.1_sfe_visium")
 
 ## Reload the dataset
