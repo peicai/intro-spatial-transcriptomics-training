@@ -1,5 +1,5 @@
 ---
-title: "Exercise 1B: SpatialFeatureExperiment Xenium"
+title: "Exercise 1B: SpatialFeatureExperiment - Xenium"
 format: html
 editor: source
 editor_options:
@@ -44,6 +44,7 @@ The full Xenium output is very large and includes cell boundaries, nucleus bound
 
 
 ```{r day1-1b-SFE-2}
+# Define the region of interest
 roi_xenium <- c(
   xmin = 2200,
   xmax = 4500,
@@ -56,8 +57,10 @@ roi_xenium
 We import the Xenium output with `flip = "none"` so the exercise uses the native Xenium coordinate orientation. We will see below that this differs from the coordinate system used by the Visium HD platform, which can be accounted for at the import stage, or later for when visualizing the data, which is what we chose to do for this practical. We import the compact Xenium output into a `SpatialFeatureExperiment` object:
 
 ```{r day1-1b-SFE-4}
+# Import data into a SpatialFeatureExperiment object
 sfe_full <- readXenium("data/Human_Colon_Cancer_P2/xenium/outs", flip = "none")
 
+# Use unique Symbol for rownames
 rownames(sfe_full) <- uniquifyFeatureNames(
   ID = rowData(sfe_full)$ID,
   names = rowData(sfe_full)$Symbol
@@ -222,6 +225,7 @@ plotSpatialFeature(sfe, "PIGR", exprs_values = "counts")
 Choose another marker gene and visualize its spatial pattern.
 
 How does the interpretation differ from plotting a gene on Visium HD bins? How does the expression of the same gene compares across platforms?
+:::
 
 ::: {.callout-tip collapse="true"}
 ## Answer
@@ -252,9 +256,11 @@ p_xen + p_vis
 ```
 :::
 
+::: callout-important
 ## Exercise 6
 
 Use the `plotSpatialFeature()` function to visualize the cell segmentation mask, colored by cell area, and the nuclei segmentation mask, colored by nucleus area
+:::
 
 ::: {.callout-tip collapse="true"}
 ## Answer
@@ -276,7 +282,7 @@ In the `Exercise 1A` we used the function `saveHDF5SummarizedExperiment` because
 
 As you could see above, the `SpatialFeatureExperiment` includes additional layers, and some of them are also not loaded in memory. This complicates things further and even saving the object with the  `saveHDF5SummarizedExperiment` function does not allow to fully re-import it.
 
-A nice way to save the object is to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the ArtifactDB project https://github.com/ArtifactDB). See the package vignette here:  https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html
+A nice way to save the object is to use the `alabaster.sfe` package, implementing a (language agnostic) format to represent `SpatialFeatureExperiment` on disk (see the [ArtifactDB project](https://github.com/ArtifactDB)). See the package vignette [here](https://bioconductor.org/packages/3.23/bioc/vignettes/alabaster.sfe/inst/doc/Overview.html).
 
 ```{r day1-1b-SFE-14}
 dir.create("results/day1", showWarnings = FALSE, recursive = TRUE)
