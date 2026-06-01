@@ -87,7 +87,7 @@ The `BayesSpace` package performs spatially-aware clustering using a Bayesian mo
 Go back to our binned data stored in a `SpatialExperiment` object to run `BayesSpace`. We need to quickly go through all the steps of normalization, HVG selection and dimensionality reduction.
 
 ```{r}
-spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_spe_")
+spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1a_spe_")
 spe <- logNormCounts(spe)
 
 dec <- modelGeneVarByPoisson(spe)

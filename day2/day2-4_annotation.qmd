@@ -47,11 +47,36 @@ Which technology was used to generate this dataset anf what is the design of the
 ### Answer
 This scRNA-seq was generated with the 10X FLEX technology, which is probe-based and allows to work with FFPE tissue blocks.
 
-Sample barcodes, sequended together with the probe sequences allow to pool multiple samples together and then demultiplex them. Here 2 pools of 2 samples (P2CRC/P4CRC, P3NAT/P5NAT) and 1 pool of 4 samples (P1CRC/P3CRC/P5CRC/P2NAT) were created and each pool was sequenced on multiple 10X lanes
+Sample barcodes, sequended together with the probe sequences allow to pool multiple samples together and then demultiplex them. Here 2 pools of 2 samples (P2CRC/P4CRC, P3NAT/P5NAT) and 1 pool of 4 samples (P1CRC/P3CRC/P5CRC/P2NAT) were created and each pool was sequenced on multiple 10X Chromium lanes
 :::
 
-### Load the FLEX dataset
+### Download the FLEX dataset
 
+https://raw.githubusercontent.com/10XGenomics/HumanColonCancer_VisiumHD/refs/heads/main/MetaData/SingleCell_MetaData.csv.gz
+
+https://ftp.ncbi.nlm.nih.gov/geo/series/GSE280nnn/GSE280311/suppl/
+https://ftp.ncbi.nlm.nih.gov/geo/series/GSE280nnn/GSE280311/suppl/GSE280311_RAW.tar
+```{r download}
+options(timeout = 600)
+
+if (!dir.exists("data/Human_Colon_Cancer_P2/")) {
+  dir.create("data", showWarnings = FALSE)
+  download.file(
+    url = "https://intro-spatial-transcriptomics-training.s3.eu-central-1.amazonaws.com/Human_Colon_Cancer_P2.tar.gz",
+    destfile = "data/Human_Colon_Cancer_P2.tar.gz",
+    mode = "wb"
+  )
+
+  untar(
+    tarfile = "data/Human_Colon_Cancer_P2.tar.gz",
+    exdir = "data/"
+  )
+
+  file.remove("data/Human_Colon_Cancer_P2.tar.gz")
+} else {
+  message("Data exists, please proceed to next steps!")
+}
+```
 The dataset should already have been downloaded with the Visium HD and Xenium data at the beginning of the course
 
 ```{r}
