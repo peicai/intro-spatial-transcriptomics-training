@@ -148,7 +148,7 @@ spe_seg$map |> head()
 Load the previous binned object for comparison:
 
 ```{r day1-1c-visium_HD_segmented-6}
-spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1_spe_")
+spe <- loadHDF5SummarizedExperiment(dir="results/day1/", prefix="01.1a_spe_")
 ```
 
 ::: callout-important
