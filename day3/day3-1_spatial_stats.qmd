@@ -36,6 +36,7 @@ library("spatialFDA")
 library("scrapper")
 library("dittoSeq")
 library("sosta")
+library("alabaster.sfe")
 set.seed(1234)
 ```
 
@@ -47,7 +48,7 @@ knitr::opts_chunk$set(cache.lazy = FALSE)
 
 ```{r}
 # Load the SpatialExperiment objectq
-sfe <- loadHDF5SummarizedExperiment(dir="results/day1", prefix="01.2_sfe_")
+sfe <- readObject("results/day2/02.4_sfe/")
 # set imageData to NULL as we do not need it anymore
 imgData(sfe) <- NULL
 ```
@@ -66,7 +67,7 @@ With spots of 2um^2, Visium HD can provide subcellular resolution. We can segmen
 
 In what follows, we will perform three types of analyses on different _spatial scales_ of the dataset. 
 
-- i) pixel-level analysis: This is an irregular lattice and we analyse it thus with tools from lattice data analysis 
+- i) cell-free analysis: This is an irregular lattice and we analyse it thus with tools from lattice data analysis 
 - ii) cell-level analysis: This is a point pattern pattern of cell centroids and we will analyse it with point pattern analysis.
 - iii) multi-cellular analysis: This is a structure-based analysis that we will analyse with geometric tools.
 
@@ -112,8 +113,7 @@ A famous measure of global spatial autocorrelation is called Moran's $I$, which 
 ::: callout-important
 ### Exercise
 
-- Model the variance of the log-transformed expression profiles per gene with `scrapper::modelGeneVar()` (using the argument `subset.row` will make the fitting faster)
-- Extract the top 200 highly variable genes in this dataset with `scran::getTopHVGs()`
+- Extract the top 200 highly variable genes in this dataset with `scrapper::modelGeneVariances()` and `scrapper::chooseHighlyVariableGenes`
 - Calculate the global Moran's $I$ coefficient with the function `Voyager::runUnivariate()` on these 200 highly variable genes. You can find information and examples on how to run this function by typing `?runUnivariate` in your console
 - Extract the top 3 genes with the highest Moran's $I$ value
 - Plot the expression of these three genes in space using `Voyager::plotSpatialFeature`
@@ -127,12 +127,6 @@ First, we model the variance on a subset of the genes for computational reasons
 Then, we extract the 200 most highly variable genes
 
 ```{r}
-#calculate the size factors
-sf <- centerSizeFactors(colSums(assay(sfe)))
-#normalise the data
-normed <- scrapper::normalizeCounts(assay(sfe), size.factors = sf)
-logcounts(sfe) <- normed
-
 gene.var <- modelGeneVariances(logcounts(sfe), 
                                num.threads = 1)
 # chooseHighlyVariableGenes() expects the residual variance statistics
@@ -146,21 +140,6 @@ gene.var[["hvg"]] <- is.hvg
 rowData(sfe) <- cbind(rowData(sfe), gene.var)
 #extract the gene names of the hvgs
 hvg <- rownames(sfe)[is.hvg]
-#cluster the data
-pca.out <- runPca(
-    assay(sfe, "logcounts")[is.hvg, ]
-)
-
-reducedDim(sfe, "PCA") <- t(pca.out$components)
-
-snn.graph <- buildSnnGraph(
-    pca.out$components
-)
-
-# Cluster the graph
-clust.out <- clusterGraph(snn.graph, multilevel.resolution = 0.5)
-sfe$cluster <- factor(clust.out$membership)
-table(sfe$cluster)
 ```
 
 Next, we calculate global Moran's I for these 200 genes
@@ -305,7 +284,7 @@ In the cell-based analysis chapter, we will compare the distribution of categori
 #| fig-width: 10
 #| fig-height: 10
 plotSpatialFeature(sfe, 
-    features="cluster",
+    features="SingleR_label",
     colGeometryName="centroids",
     size = 1) +
     guides(col=guide_legend(override.aes=list(size=2)))
@@ -331,24 +310,26 @@ We will focus on three cell types to make the results more interpretable
 resCross <- calcCrossMetricPerFov(
   sfe,
   correction = "iso",
-  selection = c(1,2,3),
+  selection = c("Tumor", "T cells", "B cells"),
   subsetby = "sample_id",
-  fun = "Lcross", marks = "cluster",
+  fun = "Lcross", 
+  marks = "SingleR_label",
   rSeq = seq(0, 100, length.out = 100), by = c("sample_id"),
   ncores = 1
 )
 ```
 
 ```{r}
-#| fig-width: 15
-#| fig-height: 10
+#| fig-width: 10
+#| fig-height: 7
 plotCrossMetricPerFov(
   resCross,
   theo = TRUE,
   correction = "iso",
   x = "r",
-  imageId = 'sample_id'
-)
+  imageId = 'sample_id',
+  linewidth = 1
+) 
 ```
 
 ::: callout-important
@@ -363,7 +344,7 @@ We note a few things:
 - All cells cluster among themselves and across scales (the diagonal of the plot)
 - All cells show spacing (below the dashed line) of radii $r$ smaller than 15 $\mu$m $\rightarrow$ cell diameter
 - Immune cells build aggregates
-- Epithelial cells show spacing in comparison to immune cells. 
+- Tumor cells show spacing in comparison to immune cells, there seems to be no immune invasion into the tumor
 :::
 
 ## Multicellular analysis
@@ -384,8 +365,8 @@ sfe$imageName <- "image1"
 # Let us first look
 shapeIntensityImage(
     sfe,
-    marks = "cluster",
-    markSelect = "1"
+    marks = "SingleR_label",
+    markSelect = "Tumor"
 )
 ```
 
@@ -394,8 +375,8 @@ We can use the following function to segment the tumor region. The result is an 
 ```{r}
 tumor <- reconstructShapeDensitySPE(
   sfe,
-  marks = "cluster",
-  markSelect = "1",
+  marks = "SingleR_label",
+  markSelect = "Tumor",
   imageCol = "imageName"
 )
 ```
@@ -403,7 +384,7 @@ tumor <- reconstructShapeDensitySPE(
 We can directly plot the resulting polygon using `geom_sf`. Note that the argument `inherit.aes = FALSE` is important for the function to work correctly.
 
 ```{r}
-plotSpatialFeature(sfe, features="cluster", colGeometryName="centroids") +
+plotSpatialFeature(sfe, features="SingleR_label", colGeometryName="centroids") +
     guides(col=guide_legend(override.aes=list(size=3)))+
     geom_sf(data = tumor, fill = NA, color = "black", linewidth = 0.75, inherit.aes = FALSE,)
 ```
@@ -454,17 +435,17 @@ plotSpatialFeature(sfe, features="minDist", colGeometryName="centroids") +
 We can now visualize the density distribution with respect to the tumor borders in a violin plot. Negative values correspond to cells within a tumor structure. 
 
 ```{r}
-cluster_levels <- levels(factor(colData(sfe)$cluster))
-cluster_colors <- setNames(unname(dittoColors())[seq_along(cluster_levels)], cluster_levels)
+cell_type_levels <- levels(factor(colData(sfe)$SingleR_label))
+cell_type_colors <- setNames(unname(dittoColors())[seq_along(cell_type_levels)], cell_type_levels)
 
 colData(sfe) |>
   as.data.frame() |>
-  mutate(cluster = reorder(cluster, minDist, FUN = median)) |>
-  ggplot(aes(x = minDist, y = cluster, fill = cluster)) +
+  mutate(SingleR_label = reorder(SingleR_label, minDist, FUN = median)) |>
+  ggplot(aes(x = minDist, y = SingleR_label, fill = SingleR_label)) +
   geom_violin() +
   theme_bw() +
   geom_vline(xintercept = 0, linetype = "dashed") +
-  scale_fill_manual(values = cluster_colors)
+  scale_fill_manual(values = cell_type_colors)
 ```
 ::: callout-important
 ### Exercise
@@ -476,7 +457,7 @@ What do you notice?
 Interestingly, the cell type XXX is almost exclusively within the tumor regions. XXX is very close to the border. Again this depends on the parameters and the definition of the *correct* segementation.
 :::
 
-#### Cell- type proportions
+### Cell- type proportions
 
 Next, we look at the cell type proportions in each tumor region.
 
@@ -493,10 +474,10 @@ sel <- colData(sfe) |>
 df <- colData(sfe) |>
   as.data.frame() |>
   filter(tumorAssign %in% sel) |>
-  count(tumorAssign, cluster)
+  count(tumorAssign, SingleR_label)
 
 p0 <- ggplot(df, aes(reorder(tumorAssign, n),
-                     x = n, fill = cluster)) +
+                     x = n, fill = SingleR_label)) +
   theme_bw() +
   scale_fill_manual(values = unname(dittoColors()))
 p1 <- p0 +
@@ -652,12 +633,6 @@ qqnorm(resid(mdl), pch = 16)
 qqline(resid(mdl))
 ```
 
-```{r}
-saveHDF5SummarizedExperiment(sfe, dir="results/day3", prefix="01.3_sfe_annotated", replace=TRUE,
-                                chunkdim=NULL, level=NULL, as.sparse=NA,
-                                verbose=NA)
-```
-
 :::
 :::
 
@@ -670,20 +645,11 @@ Now we will subset to only the tumor regions.
 sfe_sub <- sfe[, sfe$tumorAssign %in% sel]
 ```
 
-```{r}
-# identify mitochondrial genes
-gn <- rowData(sfe_sub)$Symbol
-mt <- grepl("^MT-", gn, ignore.case = TRUE)
-table(mt)
-# remove them
-sfe_sub <- sfe_sub[!mt, ]
-```
-
 We will pseudo-bulk within each tumor and do PCA.
 
 ```{r}
 # pseudo-bulk at the structure level
-agg <- aggregateAcrossCells(counts(sfe_sub), list(groups = sfe_sub$tumorAssign))
+agg <- scrapper::aggregateAcrossCells(counts(sfe_sub), list(groups = sfe_sub$tumorAssign))
 # normalize counts
 nc <- normalizeCounts(agg$sums, size.factors = colSums(agg$sums))
 # run PCA
@@ -732,8 +698,8 @@ To generate a more refined segmentation, the intensity threshold in `reconstruct
 #| eval: false
 reconstructShapeDensitySPE(
   sfe,
-  marks = "cluster",
-  markSelect = "1",
+  marks = "SingleR_label",
+  markSelect = "Tumor",
   imageCol = "imageName",
   thres = 3E-4
 )
@@ -742,3 +708,8 @@ reconstructShapeDensitySPE(
 You should see some change, but the non-tumor genes are still picked up. This further indicates that we might see an interesting biological pattern.
 :::
 :::
+
+```{r}
+#| eval: false
+alabaster.sfe::saveObject(sfe, "results/day3/03.1_sfe")
+```
