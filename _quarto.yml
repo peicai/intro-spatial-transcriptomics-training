@@ -2,7 +2,7 @@ project:
   type: website
   execute-dir: project
   render:
-    - "**/*.qmd"
+    - "day*/*.qmd"
     - "!CONTRIBUTIONG.md"
     - "!LICENSE.md"
     - "!scripts/prepare_2026_course_data.qmd"
