@@ -13,6 +13,7 @@ execute:
 #| warning: false
 #| output: false
 
+library(scater)
 library(SpatialExperiment)
 library(SpatialFeatureExperiment)
 library(Voyager)
