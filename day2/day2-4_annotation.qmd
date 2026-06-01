@@ -182,16 +182,22 @@ plotSpatialFeature(sfe,
                    colGeometryName = "cellSeg",
                    features = "SingleR_label")
 
-    
+## Or on the UMAP
+ggcells(sfe, aes(x = UMAP.1, y=UMAP.2, color=SingleR_label)) + 
+  geom_point() +
+  scale_colour_manual(values = ditto_colors) + 
+  theme_bw() 
 ```
 
 :::{.callout-important}
 ### Exercise 4
 What do you think about this annotation? 
 
-How do the proportions of different cell types compare to teh annotated scRNA-seq dataset?
+How do the proportions of different cell types compare to the annotated scRNA-seq dataset?
 
-Do you identify potentially relevant biological structures? Go back to the calculated clusters and spatial domains, to see how do they match 
+Do you identify potentially relevant biological structures? Go back to the calculated clusters and spatial domains, to see how do they match.
+
+Try annotating the dataset wtih the higher-resolution cell-types lables in `ref.sce$Level2`
 :::
 
 :::{.callout-tip collapse="true"}
@@ -232,7 +238,7 @@ pheatmap(
 
 :::{.callout-important}
 
-### Exercise 5: Bonus
+## Exercise 5: Bonus
 
 Perform the same annotation task on the Xenium dataset. How do the results compare? What could be a limitation here?
 :::
@@ -242,6 +248,73 @@ Perform the same annotation task on the Xenium dataset. How do the results compa
 
 One limitation of this Xenium dataset is the limited number of genes targeted by the probe panel.
 :::
+
+:::{.callout-important}
+
+## Exercise 6: Bonus
+
+We ignored here the fact that segmented data suffer from segmentation error, that multiple cells can overlap on the slide, and that spatial data in general suffers from local diffusion of transcripts. This results in contamination of each cell's transcriptome with transcripts from other cells. 
+The RCTD method from the `spacexr` package ([Cable _et al._ 2022](https://www.nature.com/articles/s41587-021-00830-w)) can be used in flag these cases and provide a principled estimate of the most likely composition. Try to run this method on our dataset, you can refer to [this section of the OSTA book](https://bioconductor.org/books/release/OSTA/pages/seq-deconvolution.html#rctd) for guidance. How do you interpret the results?
+
+:::
+
+:::{.callout-tip collapse="true"}
+### Answer
+
+See the vignette here: https://raw.githack.com/dmcable/spacexr/master/vignettes/spatial-transcriptomics.html
+
+```{r, eval=F}
+## Install latest version from Github
+BiocManager::install("dmcable/spacexr")
+library(spacexr)
+sort(table(ref.sce$Level2))
+## We need a minimum of 25 cells for each cell type in the reference, so we'll go for Level1 here
+reference <- Reference(counts(ref.sce), 
+                       cell_types=setNames(factor(ref.sce$Level1), nm = colnames(ref.sce)), 
+                       nUMI=colSums(counts(ref.sce)))
+## Create SpatialRNA object
+to_annotate <- SpatialRNA(coords=data.frame(spatialCoords(sfe)), 
+                          counts=counts(sfe),
+                          nUMI=colSums(counts(sfe)))
+rctd_data <- create.RCTD(to_annotate, reference)
+
+## Run RCTD
+res <- run.RCTD(rctd_data, doublet_mode="doublet")
+## We use here the "doublet" mode to fit at most two cell types per segmented cell, probably this is a reasonable assumption for a high-resolution technology such as Visium HD.
+
+## Inspect results
+results <- res@results
+# normalize the cell type proportions to sum to 1.
+norm_weights <- normalize_weights(results$weights) 
+cell_type_names <- res@cell_type_info$info[[2]] #list of cell type names
+
+# Plots the confident weights for each cell type as in full_mode (saved as 
+# 'results/cell_type_weights.pdf')
+plot_weights(cell_type_names, to_annotate, "./results/", norm_weights) 
+
+## Extract major cell type
+sfe$RCTD.first <- NA
+colData(sfe)[row.names(results$results_df), ]$RCTD.first <- as.character(results$results_df$first_type)
+plotSpatialFeature(sfe,  
+                   colGeometryName = "cellSeg",
+                   features = "RCTD.first") 
+
+## Likely "doublets"
+sfe$RCTD.doublet <- NA
+colData(sfe)[row.names(results$results_df), ]$RCTD.doublet <- as.character(results$results_df$spot_class)
+plotSpatialFeature(sfe,  
+                   colGeometryName = "cellSeg",
+                   features = "RCTD.doublet") 
+```
+
+<!-- 
+Weird vertical line, esp. visible for epithelial, fibroblast... Is this a tile boundary? 
+
+TO DO: better plotting? See OSTA book: plot weight for each cell type
+-->
+
+:::
+
 
 ## Saving the final `SpatialFeatureExperiment` object
 
