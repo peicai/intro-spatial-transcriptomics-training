@@ -242,3 +242,10 @@ Perform the same annotation task on the Xenium dataset. How do the results compa
 
 One limitation of this Xenium dataset is the limited number of genes targeted by the probe panel.
 :::
+
+## Saving the final `SpatialFeatureExperiment` object
+
+```{r}
+alabaster.sfe::saveObject(sfe, "results/day2/02.4_sfe")
+```
+

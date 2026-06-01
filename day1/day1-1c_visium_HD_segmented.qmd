@@ -403,9 +403,6 @@ metadata(sfe_seg) <- metadata(sfe_seg)[1:2]
 # mkdir("results/day1")
 alabaster.sfe::saveObject(sfe_seg, "results/day1/01.1c_sfe_visium")
 fs::dir_tree("results/day1/01.1c_sfe_visium")
-
-## Reload the dataset
-# sfe_test <- alabaster.base::readObject("results/day1/01.1_sfe_visium/")
 ```
 
 For the rest of the exercises, we will use this Visium HD segmented object, but feel free to replace by the binned object (`Exercise 1A`) or the Xenium object (`Exercise 1B`) to compare the results.
