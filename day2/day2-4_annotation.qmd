@@ -17,6 +17,7 @@ library(patchwork)
 library(SpatialExperiment)
 library(SpatialFeatureExperiment)
 library(Voyager)
+library(DropletUtils)
 library(SingleR)
 library(viridis)
 library(RColorBrewer)
@@ -33,24 +34,46 @@ sfe <- readObject("results/day2/02.3_sfe/")
 sfe
 ```
 
-## TO DO: loading oa single-cell Chromium FLEX dataset
+## Perform cell-type annotation of the cells
+
+To transfer cell-type labels to out Visium HD dataset, we'll use a matching scRNA-seq dataset generated for the same article by the 10X team, see the record on [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE280311).
+
+::: callout-important
+## Exercise 1
+Which technology was used to generate this dataset anf what is the design of the experiment?
+:::
+
+::: {.callout-tip collapse="true"}
+### Answer
+This scRNA-seq was generated with the 10X FLEX technology, which is probe-based and allows to work with FFPE tissue blocks.
+
+Sample barcodes, sequended together with the probe sequences allow to pool multiple samples together and then demultiplex them. Here 2 pools of 2 samples (P2CRC/P4CRC, P3NAT/P5NAT) and 1 pool of 4 samples (P1CRC/P3CRC/P5CRC/P2NAT) were created and each pool was sequenced on multiple 10X lanes
+:::
+
+### Load the FLEX dataset
+
+The dataset should already have been downloaded with the Visium HD and Xenium data at the beginning of the course
+
+```{r}
+ref.sce <- DropletUtils::read10xCounts("data/Human_Colon_Cancer_P2/chromium/Human_DTC_5pv2_P5_CRC_count_filtered_feature_bc_matrix.h5")
+## TO DO: this doesn't seem to be the same dataset... Plus we need the annotated data!
 
 
-## Perform cell-type annotation of the spots
 
-We'll use the annotation of the scRNA-seq dataset (10X FLEX technology) generated along with the VisiumHD used in the practicals (See the record on [GEO](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE280311) and the related [Github repository](https://github.com/10XGenomics/HumanColonCancer_VisiumHD/tree/main)). We subsetted this reference dataset to 5,000 cells.
 
-To annotate each spot, we use the `SingleR()` method, which uses a correlation-based approach comparing test cells (here: spots) to reference samples with known cell-type annotation.
+```
+
+### Perform the anotation with `SingleR`
+To annotate each cell, we use the `SingleR()` method, which uses a correlation-based approach comparing test cells (here: cells) to reference samples with known cell-type annotation.
 
 
 ```{r}
-ref.se = qs_read("data/Human_Colon_Cancer_P1/NatGenetics2025_CRC_5k.SE.qs")
-table(colData(ref.se)$labels)
+table(colData(ref.sce)$labels)
 
 # Predict cell-type using SingleR 
 pred <- SingleR(test   = logcounts(sfe),
-                ref    = assay(ref.se, "data"), # log-normalized counts        
-                labels = ref.se$labels,
+                ref    = assay(ref.sce, "data"), # log-normalized counts        
+                labels = ref.sce$labels,
                 aggr.ref = TRUE,                # pseudo-bulk aggregation of reference labels  
                 fine.tune = FALSE,              # for faster computation here
 )
