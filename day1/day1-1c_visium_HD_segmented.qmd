@@ -40,6 +40,7 @@ library(ggspavis)
 library(HDF5Array)
 library(alabaster.base)
 library(alabaster.sfe)
+library(fs)
 ```
 
 Finally, we will work with the **Visium HD segmented output**. This data corresponds to the same sample and region of interest as the binned data from `Exercise 1A`, but instead of being binned, it contains the output of cell segmentation. Since Space Ranger version 4, the output of cell segmentation is available as an optional output of the pipeline, and it contains the coordinates of the segmented cells and their boundaries.
@@ -401,7 +402,7 @@ metadata(sfe_seg) <- metadata(sfe_seg)[1:2]
 
 # mkdir("results/day1")
 alabaster.sfe::saveObject(sfe_seg, "results/day1/01.1c_sfe_visium")
-fs::dir_tree("results/day1/01.1_sfe_visium")
+fs::dir_tree("results/day1/01.1c_sfe_visium")
 
 ## Reload the dataset
 # sfe_test <- alabaster.base::readObject("results/day1/01.1_sfe_visium/")
