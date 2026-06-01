@@ -18,6 +18,7 @@ library(SpatialFeatureExperiment)
 library(Voyager)
 library(DropletUtils)
 library(SingleR)
+library(tidyverse)
 library(stringr)
 library(patchwork)
 library(viridis)
@@ -185,13 +186,23 @@ plotSpatialFeature(sfe,
 
 :::{.callout-important}
 ### Exercise 4
-What do you think about this annotation? Do you identify potentially relevant biological structures? Go back to the calculated clusters and spatial domains, to see how do they match 
+What do you think about this annotation? 
+
+How do the proportions of different cell types compare to teh annotated scRNA-seq dataset?
+
+Do you identify potentially relevant biological structures? Go back to the calculated clusters and spatial domains, to see how do they match 
 :::
 
 :::{.callout-tip collapse="true"}
 ### Answer
+Let's calculate the proportion of cells from each cell type:
+```{r}
+prop.table(table(ref.sce$Level1))
+prop.table(table(sfe$SingleR_label))
+```
+We observe a relatively higher proportion of Endothelial cells and Fibroblast in the Visium HD. Maybe such cell-types are less easily captured by the droplet-based scRNA-seq technology?
 
-Let's compare to the Leiden cluster for example:
+Let's compare the annotation to the Leiden clustering for example:
 ```{r}
 plotSpatialFeature(sfe,  
                    colGeometryName = "cellSeg",
@@ -202,7 +213,7 @@ plotSpatialFeature(sfe,
 
 ## For a more formal comparison
 tab_prop <- prop.table(table(sfe$Leiden, sfe$SingleR_label), margin = 1)
-## Display the proprotions: round and remove 0s
+## Display the proportions: round and remove 0s
 num_mat <- round(tab_prop, 2)
 num_mat[num_mat == 0] <- ""
 
@@ -229,5 +240,4 @@ Perform the same annotation task on the Xenium dataset. How do the results compa
 ### Answer
 
 One limitation of this Xenium dataset is the limited number of genes targeted by the probe panel.
-
 :::
