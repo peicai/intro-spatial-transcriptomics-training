@@ -253,8 +253,11 @@ One limitation of this Xenium dataset is the limited number of genes targeted by
 
 ## Exercise 6: Bonus
 
-We ignored here the fact that segmented data suffer from segmentation error, that multiple cells can overlap on the slide, and that spatial data in general suffers from local diffusion of transcripts. This results in contamination of each cell's transcriptome with transcripts from other cells. 
-The RCTD method from the `spacexr` package ([Cable _et al._ 2022](https://www.nature.com/articles/s41587-021-00830-w)) can be used in flag these cases and provide a principled estimate of the most likely composition. Try to run this method on our dataset, you can refer to [this section of the OSTA book](https://bioconductor.org/books/release/OSTA/pages/seq-deconvolution.html#rctd) for guidance. How do you interpret the results?
+We ignored the fact that segmented data suffer from segmentation error, that multiple cells can overlap on the slide, and that spatial data in general suffers from local diffusion of transcripts. All these result in contamination of each cell's transcriptome with transcripts from other cells. 
+
+It is possible to use deconvolution methods to "decontaminate" the cells. For example the RCTD method from the `spacexr` package ([Cable _et al._ 2022](https://www.nature.com/articles/s41587-021-00830-w)) can be used in flag these cases and provide a principled estimate of the most likely composition. Try to run this method on our dataset, you can refer to [this section of the OSTA book](https://bioconductor.org/books/release/OSTA/pages/seq-deconvolution.html#rctd) for guidance. 
+
+How do you interpret the results?
 
 :::
 
