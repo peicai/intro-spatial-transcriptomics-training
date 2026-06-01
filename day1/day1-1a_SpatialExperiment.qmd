@@ -214,7 +214,7 @@ colData(spe) |>
   summarise(number = n())
 ```
 
-<!-- TO DO: This doesn't seem to work very well sincer some spots obviosuly are not in_tissue...-->
+<!-- TO DO: This doesn't seem to work very well since some spots obviously are not in_tissue...-->
 
 The slot `rowData` contains gene metadata:
 
