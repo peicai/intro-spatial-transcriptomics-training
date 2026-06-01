@@ -39,8 +39,7 @@ website:
       - text: "day 3"
         menu:
           - href: "day3/day3-1_spatial_stats.qmd"
-          - href: "day3/day3-2_svg_feature_set_signatures.qmd"
-          - href: "day3/day3-3_differential_spatial_pattern.qmd"
+          - href: "day3/day3-2_differential_spatial_pattern.qmd"
     right:
       - icon: github
         href: https://github.com/sib-swiss/intro-spatial-transcriptomics-training

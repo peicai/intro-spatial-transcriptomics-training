@@ -1,5 +1,5 @@
 ---
-title: "Exercise 10"
+title: "Exercise 9"
 format: html
 editor: source
 editor_options: 
@@ -7,9 +7,9 @@ editor_options:
 ---
 
 
-## Differential analysis with multi-sample
+## Differential analysis with multiple samples
 
-In this exercise, we extend our analysis to multi-sample, multi-condition spatial transcriptomics data. With multiple samples per condition (e.g., 2 colorectal carcinoma (CRC) and 2 normal adjacent tissues), we can ask not only: 
+In this exercise, we extend our analysis to multi-sample, multi-condition spatial transcriptomics data. With multiple samples per condition, for example, 2 colorectal carcinoma (CRC) samples and 2 normal adjacent tissue (NAT) samples, we can ask not only: 
 
 > "Is a gene spatially variable within a tissue?" 
 
@@ -17,7 +17,7 @@ but also:
 
 > "Does its spatial pattern change between conditions?" 
 
-Genes showing such changes are called **differential spatial patterns (DSP)** genes. Using the `DESpace` package, we will learn how to identify such genes, that may be spatially variable in one condition but not in another, or it could be spatially variable in both conditions, but with different spatial patterns.
+Genes showing such changes are called **differential spatial patterns (DSP)** genes. Using the `DESpace` package, we will learn how to identify such genes, which may be spatially variable in one condition but not in another, or spatially variable in both conditions but with different spatial patterns.
 
 
 ## Learning Objectives
@@ -45,10 +45,10 @@ library(DESpace)
 
 ## Load preprocessed data
 
-We will work with the same VisiumHD dataset from the human colon cancer study [recently published](https://www.nature.com/articles/s41588-025-02193-3). Here we use a subsetted dataset containing 4 slides from three patients (P1CRC, P5CRC, P3NAT, and P5NAT), representing either colorectal carcinoma (CRC) or normal adjacent tissues (NAT), all with pre-computed clusters.
+We will work with the same VisiumHD dataset from the human colon cancer study [recently published](https://www.nature.com/articles/s41588-025-02193-3). Here we use a subsetted dataset containing 4 slides from three patients (P1CRC, P5CRC, P3NAT, and P5NAT), representing either colorectal carcinoma (CRC) or normal adjacent tissue (NAT), all with pre-computed clusters.
 
 ```{r}
-spe <- loadHDF5SummarizedExperiment(dir="data/Human_Colon_Cancer_P1/", prefix="02.3_spe_tmp_")
+spe <- loadHDF5SummarizedExperiment(dir="data/Human_Colon_Cancer_P1/", prefix="02.3_spe_tmp")
 
 # Remove mitochondrial genes
 gn <- rowData(spe)$Symbol
@@ -119,7 +119,7 @@ To answer the question: does the expression of a gene change between conditions,
 
 `DESpace::dsp_test()` first aggregates spot- or cell-level counts into pseudobulk counts for each (sample, domain) combination, then tests whether the interaction term (condition x domain) in the model is different from zero.
 
-> Take few minutes to run. While it is running, take a look at the [package vignette](https://peicai.github.io/DESpace/articles/DSP.html).
+> This may take a few minutes to run. While it is running, take a look at the [package vignette](https://peicai.github.io/DESpace/articles/DSP.html).
 
 ```{r}
 res_edgeR <- dsp_test(spe,
@@ -216,7 +216,7 @@ dsp_clu <- individual_dsp(spe,
 ::: callout-important
 ## Exercise 2
 
-- Extract the 4th top DSP gene.
+- Extract the 4th-ranked DSP gene.
 - Visualize its expression across samples via `ggspavis::plotCoords()` or `DESpace::FeaturePlot()` and interpret the result.
 :::
 
@@ -233,7 +233,7 @@ head(dsp_clu[[id_clu]], 5)
 # dsp_clu[["0"]] stores DSP genes for all other regions (not useful here)
 # If full clusters are used originally, dsp_clu[["8"]] would store cluster 8 results
 
-# Select the 4th top DSP genes
+# Select the 4th-ranked DSP gene
 (gs <- rownames(dsp_clu[[id_clu]])[4])
 ```
 
@@ -278,7 +278,7 @@ Cluster 8 might correspond to a stromal region that becomes expanded or remodele
 
 ::: callout-important
 ## Bonus question
-Try running the individual domain test using the default setting `test = "QLF`. How do the results change? (Hint: check the number of significant genes.) Why might this happen?
+Try running the individual domain test using the default setting `test = "QLF"`. How do the results change? (Hint: check the number of significant genes.) Why might this happen?
 :::
 
 Clear your environment:
