@@ -583,7 +583,7 @@ sfe.f
 
 ## Save the object
 
-Save the filtered `SpatialFeatureExperiment` object for the next steps. Run this after applying your filter in Exercise 3 so that the object on disk matches the QC decisions you made:
+Save the filtered `SpatialFeatureExperiment` object for the next steps. Run this after applying your filters so that the object on disk matches the QC decisions you made:
 
 ```{r}
 alabaster.sfe::saveObject(sfe.f, here::here("results/day1/01.2b_sfe_xenium_QC"))
