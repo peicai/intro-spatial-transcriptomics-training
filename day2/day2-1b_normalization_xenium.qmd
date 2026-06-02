@@ -43,12 +43,11 @@ library(alabaster.sfe)
 
 ## Load the Xenium object
 
-We start with the Xenium object saved at the end of Exercise 1B.
+We start with the QC-filtered Xenium object saved at the end of Exercise 2B.
 
 ```{r}
 # Reload the SpatialFeatureExperiment object if not in the R session already
-sfe <- readObject("results/day1/01.1b_sfe_xenium/")
-## Otherwise, quickly go through Exercise day1-1c to recreate the object
+sfe <- readObject("results/day1/01.2b_sfe_xenium/")
 sfe
 ```
 
