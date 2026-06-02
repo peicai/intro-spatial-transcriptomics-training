@@ -197,7 +197,7 @@ How do the proportions of different cell types compare to the annotated scRNA-se
 
 Do you identify potentially relevant biological structures? Go back to the calculated clusters and spatial domains, to see how do they match.
 
-Try annotating the dataset wtih the higher-resolution cell-types lables in `ref.sce$Level2`
+Try annotating the dataset with the higher-resolution cell-types lables in `ref.sce$Level2`
 :::
 
 :::{.callout-tip collapse="true"}
@@ -208,6 +208,9 @@ prop.table(table(ref.sce$Level1))
 prop.table(table(sfe$SingleR_label))
 ```
 We observe a relatively higher proportion of Endothelial cells and Fibroblast in the Visium HD. Maybe such cell-types are less easily captured by the droplet-based scRNA-seq technology?
+
+The annotation allows us to identify the different structures of the [intestine mucosa](https://en.wikipedia.org/wiki/Intestinal_villus) very clearly, with the epithelial cells composing the intestinal villi, the smooth muscle layer, and the more scattered immune cells. In this colorectal cancer sample, the invading tumor is identified very clearly. 
+
 
 Let's compare the annotation to the Leiden clustering for example:
 ```{r}
@@ -238,7 +241,7 @@ pheatmap(
 
 :::{.callout-important}
 
-## Exercise 5: Bonus
+## Exercise 5: Xenium (Bonus)
 
 Perform the same annotation task on the Xenium dataset. How do the results compare? What could be a limitation here?
 :::
@@ -246,12 +249,13 @@ Perform the same annotation task on the Xenium dataset. How do the results compa
 :::{.callout-tip collapse="true"}
 ### Answer
 
-One limitation of this Xenium dataset is the limited number of genes targeted by the probe panel.
+One limitation of this Xenium dataset is the limited number of genes targeted by the probe panel. Some recent benchmarks seem to suggest that the classical scRNA-seq annotation methods (label-transfer methods) perform relatively well: https://link.springer.com/article/10.1186/s12859-025-06044-0
+
 :::
 
 :::{.callout-important}
 
-## Exercise 6: Bonus
+## Exercise 6: RCTD (Bonus)
 
 We ignored the fact that segmented data suffer from segmentation error, that multiple cells can overlap on the slide, and that spatial data in general suffers from local diffusion of transcripts. All these result in contamination of each cell's transcriptome with transcripts from other cells. 
 
@@ -295,6 +299,13 @@ cell_type_names <- res@cell_type_info$info[[2]] #list of cell type names
 # 'results/cell_type_weights.pdf')
 plot_weights(cell_type_names, to_annotate, "./results/", norm_weights) 
 
+## Likely "doublets"
+sfe$RCTD.doublet <- NA
+colData(sfe)[row.names(results$results_df), ]$RCTD.doublet <- as.character(results$results_df$spot_class)
+plotSpatialFeature(sfe,  
+                   colGeometryName = "cellSeg",
+                   features = "RCTD.doublet") 
+
 ## Extract major cell type
 sfe$RCTD.first <- NA
 colData(sfe)[row.names(results$results_df), ]$RCTD.first <- as.character(results$results_df$first_type)
@@ -302,18 +313,19 @@ plotSpatialFeature(sfe,
                    colGeometryName = "cellSeg",
                    features = "RCTD.first") 
 
-## Likely "doublets"
-sfe$RCTD.doublet <- NA
-colData(sfe)[row.names(results$results_df), ]$RCTD.doublet <- as.character(results$results_df$spot_class)
-plotSpatialFeature(sfe,  
-                   colGeometryName = "cellSeg",
-                   features = "RCTD.doublet") 
+## Plotting the normalized weights for each cell type
+lapply(colnames(norm_weights), \(k) {
+    colData(sfe)$foo <- NA
+    colData(sfe)[row.names(norm_weights), ]$foo <- norm_weights[, k]
+    plt <- plotSpatialFeature(sfe, features = "foo") + 
+      scale_color_gradientn(colors=pals::jet())
+    plt + ggtitle(k) + guides(fill="none")
+}) |>
+  wrap_plots(nrow=3)
 ```
 
 <!-- 
 Weird vertical line, esp. visible for epithelial, fibroblast... Is this a tile boundary? 
-
-TO DO: better plotting? See OSTA book: plot weight for each cell type
 -->
 
 :::
