@@ -7,3 +7,13 @@ editor_options:
 execute:
   warning: false
 ---
+
+
+
+## Load the `SpatialFeatureExperiment` object created in Exercise 1B
+
+```{r}
+
+sfe <- readObject("results/day1/01.1b_sfe_xenium/")
+
+```
