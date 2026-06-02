@@ -9,11 +9,604 @@ execute:
 ---
 
 
+## QC imaging ST data
 
-## Load the `SpatialFeatureExperiment` object created in Exercise 1B
+Imaging-based spatial transcriptomics (ST) platforms such as **10x Xenium** are fundamentally different from sequencing-based methods like 10x Visium HD. Instead of capturing transcripts on spatially barcoded spots, Xenium detects a **targeted panel** of a few hundred to a few thousand genes *in situ* at subcellular resolution, decoding each transcript over multiple rounds of imaging and assigning it to a segmented cell.
+
+This changes what "quality control" means. Three sources of error are specific to imaging-based ST and shape the entire QC strategy:
+
+- **Background / non-specific signal** — probes can bind off-target, and the optical decoding can miscall a transcript. Xenium ships dedicated negative controls that let us measure this noise floor directly, rather than guessing it.
+- **Segmentation quality** — because we work at the single-cell level, the cell and nucleus boundaries are inferred. Over- and under-segmentation, anucleate cells, and bordering artifacts can corrupt downstream counts.
+- **Spatial context** — artifacts such as tissue-edge cells, isolated debris, and field-of-view seams are invisible to per-cell metrics alone; they reveal themselves only when QC values are mapped back onto tissue.
+
+
+::: callout-note
+Throughout this exercise we use the [`Voyager`](https://pachterlab.github.io/voyager/) / `SpatialFeatureExperiment` (SFE) ecosystem. `Voyager` is developed by the Pachter lab within Bioconductor and is released under the **Artistic-2.0** license — a permissive open-source license that allows use, modification, and redistribution provided the license and copyright notices are retained. This means you are free to reuse and adapt the code in this tutorial for teaching and research. If you use `Voyager` in published work, please cite the package (run `citation("Voyager")` in R) and its associated publication. Several QC steps here closely follow the official [Voyager Xenium vignette](https://pachterlab.github.io/voyager/articles/vig5_xenium.html), which is the recommended further reading.
+:::
+
+
+## Learning objectives
+
+By the end of this exercise you should be able to:
+
+- Identify the different **negative control** categories in Xenium output and use them to estimate the background / false-detection rate.
+- Compute and interpret **per-cell QC metrics** appropriate for a targeted imaging panel, including panel-size normalisation.
+- Diagnose **cell segmentation** quality using cell area, nucleus area, the nucleus-to-cell ratio, and the presence of nuclei.
+- Detect **spatial outliers** (isolated cells, edge artifacts) using nearest-neighbour distances.
+- Evaluate **gene-level QC** via the mean–variance relationship relative to negative controls.
+- Combine these signals into a defensible **filtering decision** and apply it to the object.
+
+
+## Libraries
+```{r}
+#| message: false
+#| warning: false
+#| output: false
+
+library(Voyager)
+library(SpatialFeatureExperiment)
+library(scater) 
+library(scuttle)
+library(sf)
+library(arrow)
+library(ggplot2)
+library(grid) 
+library(ggforce)
+library(stringr)
+library(scales)
+library(patchwork)
+library(dplyr)
+library(BiocNeighbors)
+
+library(alabaster.sfe)
+
+```
+
+```{r setup, include=FALSE}
+
+theme_clean <- theme_classic(base_size = 12) +
+    theme(
+        strip.background = element_rect(fill = "black", colour = "black"),
+        strip.text       = element_text(colour = "white", face = "bold", size = 11),
+        panel.grid       = element_blank(),
+        axis.line        = element_line(colour = "black"),
+        axis.ticks       = element_line(colour = "black"),
+        axis.text        = element_text(colour = "black"),
+        panel.spacing    = unit(1, "lines"),
+        plot.margin      = margin(10, 14, 10, 10)
+    )
+
+theme_set(theme_clean)
+```
+
+
+## Load the Xenium object
+
+We start with the Xenium object saved at the end of Exercise 1B. It is a `SpatialFeatureExperiment` saved with `alabaster.sfe` package. 
 
 ```{r}
 
-sfe <- readObject("results/day1/01.1b_sfe_xenium/")
+# Reload the SpatialFeatureExperiment object if not in the R session already
+sfe <- alabaster.base::readObject(here::here("results/day1/01.1b_sfe_xenium"))
+## Otherwise, quickly go through Exercise day1-1b to recreate the object
+sfe
+```
+
+
+## Negative probes
+
+Xenium includes several categories of control features alongside the real gene targets, see nice paper criticially assessing them [Hallinan et al., 2026](https://elifesciences.org/articles/107070). They are flagged in `rowData(sfe)$Type` and each estimates a different failure mode, which is why we keep them separate:
+
+- **Negative Control Probe** — real probes targeting non-biological sequences. Their counts estimate the probe-level background, mainly non-specific hybridisation, with a smaller contribution from decoding error.
+- **Negative Control Codeword** — valid codewords deliberately left unassigned to any gene; no probe should ever produce them, so their counts measure decoding / optical error alone. These are used to calibrate the per-transcript quality scores.
+- **Unassigned Codeword** — leftover unused codeword space with no assigned probe. Counts should be negligible; reported for completeness rather than used as a primary QC metric.
+
+Looking at a couple of features per category:
+
+```{r}
+as.data.frame(rowData(sfe)) |>
+  tibble::rownames_to_column("feature") |>
+  group_by(Type) |>
+  slice_head(n = 2) |>
+  ungroup() |> dplyr::select(feature,Type)
+```
+
+We build a logical index for each control category. These indices are reused everywhere below — both to compute per-cell background and to exclude controls when counting "real" signal.
+
+```{r}
+# get indices of probe controls
+is_neg <- rowData(sfe)$Type == "Negative Control Probe"
+print(paste0("Probe controls in the data: ",sum(is_neg)))
+```
+
+```{r}
+# get indices of probe controls
+is_neg2 <- rowData(sfe)$Type == "Negative Control Codeword"
+print(paste0("Decoding controls in the data: ",sum(is_neg2)))
+```
+
+```{r}
+# get indices of genomic DNA control
+is_blank <- rowData(sfe)$Type == "Unassigned Codeword"
+print(paste0("gDNA controls in the data: ",sum(is_blank)))
+```
+
+```{r}
+# assign all negative control indices to one vector
+is_any_neg <- is_blank | is_neg | is_neg2
+```
+
+`addPerCellQCMetrics()` (from `scuttle`) computes, for every cell, the total counts and the percentage of counts falling into each subset we hand it. The `_percent` columns are the key background metric. 
+
+```{r}
+# run scuttle() automatic QC function
+sfe <- addPerCellQCMetrics(sfe, subsets = list(unassigned = is_blank,
+                                               negProbe = is_neg,
+                                               negCodeword = is_neg2,
+                                               any_neg = is_any_neg))
+```
+
+The histograms of the per-cell negative-control **percentages**. A healthy run shows most cells at very low percentages, with a thin tail of suspect cells. The log x-axis spreads out that tail.
+
+```{r}
+#| fig-width: 6
+#| fig-height: 10
+cols_use <- names(colData(sfe))[str_detect(names(colData(sfe)), "_percent$")]
+plotColDataHistogram(sfe, cols_use, bins = 100) + 
+    scale_x_log10() +
+    annotation_logticks(sides = "b")
+```
+
+And the absolute per-cell sums for each category. These tell you the raw magnitude of background counts; most cells should have only a handful of negative counts in total.
+
+```{r}
+cols_use <- names(colData(sfe))[str_detect(names(colData(sfe)), "_sum$")]
+
+plotColDataHistogram(sfe, cols_use, bins = 20, ncol = 2) +
+    scale_x_continuous(
+        breaks = function(x) {
+            br <- scales::breaks_extended(Q = c(1, 2, 5))(x)
+            br[br == floor(br)]
+        }
+    ) +
+    scale_y_log10() +
+    annotation_logticks(sides = "l")
+```
+
+Mapping the background back to the slide is the real test: random optical/hybridisation noise should be spatially uniform. If high-negative cells cluster in a region or along a seam, that points to a localized artifact (e.g. tissue fold, focus problem) rather than generic noise. Here we flag cells above 10% negative and overlay their centroids.
+
+```{r}
+
+sfe$more_neg <- sfe$subsets_any_neg_percent > 10
+plotSpatialFeature(sfe, "subsets_any_neg_sum", colGeometryName = "cellSeg",
+                   show_axes = TRUE) +
+  geom_sf(data = SpatialFeatureExperiment::centroids(sfe)[sfe$more_neg,],
+          size = 0.5, color = "darkred") +
+  theme(legend.position = "bottom")
+```
+
+
+::: callout-important
+## Exercise 1
+
+Check negative probe controls and with cuttof > 5%
+
+:::
+
+:::{.callout-tip collapse="true"}
+### Answer
+
+```{r}
+
+sfe$more_neg <- sfe$subsets_any_neg_percent > 3
+plotSpatialFeature(sfe, "subsets_negProbe_sum", colGeometryName = "cellSeg",
+                   show_axes = TRUE) +
+  geom_sf(data = SpatialFeatureExperiment::centroids(sfe)[sfe$more_neg,],
+          size = 0.5, color = "darkred") +
+  theme(legend.position = "bottom")
+```
+
+
+
+:::
+
+
+We can also go below the cell level and look at where the negative transcripts physically land, straight from `transcripts.parquet`. 
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+tx <- read_parquet("data/Human_Colon_Cancer_P2/xenium/outs/transcripts.parquet")
+tx |> 
+  filter(feature_name %in% rownames(sfe)[is_any_neg]) |> 
+  #filter(cell_id %in% rownames(colData(sfe))) %>%
+  ggplot(aes(x_location, -y_location)) +
+  geom_bin2d(binwidth = 30) +
+  scale_fill_distiller(palette = "Blues", direction = 1) +
+  labs(x = NULL, y = NULL)
 
 ```
+
+The negative-control signal is low across the entire tissue (most bins are pale, in the single digits) and cleanly outlines the tissue footprint, with the off-tissue area essentially empty. The faintly denser bins are not random: they coincide with morphologically crowded regions — the folded edge along the left margin, the structure in the lower-right, and higher-cellularity interior — which is the expected signature of background that scales with local transcript density (more amplified product around leads to slightly more non-specific binding and misdecodes). Crucially, there are no straight lines, regular grids, or isolated bright squares in empty space, so there is no sign of field-of-view stitching seams or discrete optical artifacts. 
+
+
+
+::: callout-important
+## Exercise 2
+
+Plot transcripts assigned to negative controls only to for the cropped SFE object that we used before. 
+
+:::
+
+:::{.callout-tip collapse="true"}
+### Answer
+
+```{r}
+#| fig-width: 8
+#| fig-height: 6
+tx <- read_parquet("data/Human_Colon_Cancer_P2/xenium/outs/transcripts.parquet")
+tx |> 
+  filter(feature_name %in% rownames(sfe)[is_any_neg]) |> 
+  filter(cell_id %in% rownames(colData(sfe))) %>%
+  ggplot(aes(x_location, -y_location)) +
+  geom_bin2d(binwidth = 10) +
+  scale_fill_distiller(palette = "Blues", direction = 1) +
+  labs(x = NULL, y = NULL)
+
+
+```
+:::
+
+
+
+## Cell quality
+
+Now we turn to the cells themselves. Note that the QC metrics already in `colData` (`*_sum`, `*_percent`) were added by `scuttle`; here we recompute the real-signal counts and detected genes by excluding every control feature.
+
+```{r}
+names(colData(sfe))
+```
+
+`nCounts` and `nGenes` use only the `Gene Expression` rows. Because the panel size is fixed and modest, we also report **panel-normalised** versions (`*_normed`), which make these numbers comparable across datasets profiled with different panels.
+
+```{r}
+n_panel <- sum(!is_any_neg)
+sfe$nCounts <- colSums(counts(sfe)[!is_any_neg,])
+sfe$nGenes <- colSums(counts(sfe)[!is_any_neg,] > 0)
+colData(sfe)$nCounts_normed <- sfe$nCounts/n_panel
+colData(sfe)$nGenes_normed <- sfe$nGenes/n_panel
+```
+
+The distributions of counts and detected genes. With a targeted panel these are typically much lower and less skewed than scRNA-seq, so look for a clear low-count population to exclude rather than a long high tail.
+
+```{r}
+p1 = plotColDataHistogram(sfe, c("nCounts", "nGenes"))
+p2 = plotColDataHistogram(sfe, c("nCounts_normed", "nGenes_normed"))
+
+p1 | p2 
+```
+
+Mapping counts and genes in space reveals whether low-signal cells are random (acceptable) or concentrated in specific tissue regions (a biological boundary, or a technical dropout zone to investigate).
+
+```{r}
+p1 = plotSpatialFeature(sfe, "nCounts", colGeometryName = "cellSeg")
+p2 = plotSpatialFeature(sfe, "nGenes", colGeometryName = "cellSeg")
+
+p1 | p2 
+```
+
+`nCounts` vs `nGenes` should be tightly, monotonically related. Cells off this trend — many counts but few genes — can indicate a dominant transcript or a contamination/segmentation issue.
+
+```{r}
+plotColData(sfe, x="nCounts", y="nGenes", bins = 70) +
+    scale_fill_distiller(palette = "Blues", direction = 1)
+```
+
+
+
+::: callout-important
+## Exercise 3
+
+The cell-level metrics inherit whatever decoding quality the transcripts had. Using `transcripts.parquet`, explore the per-transcript **quality value** (`qv`, a Phred-scaled decoding confidence). What fraction of transcripts fall below the conventional Q20 cutoff, and which genes have the lowest mean `qv`?
+
+:::
+
+:::{.callout-tip collapse="true"}
+### Answer
+
+`qv` measures how confidently each transcript was decoded; 10x's default pipeline already filters at Q20, but inspecting the distribution tells you how aggressive that cut is for the panel, and a low per-gene mean `qv` flags probes worth treating with caution.
+
+```{r}
+tx <- read_parquet("data/Human_Colon_Cancer_P2/xenium/outs/transcripts.parquet")
+
+# Distribution of decoding quality, with the Q20 reference line
+tx |>
+  ggplot(aes(qv)) +
+  geom_histogram(bins = 100) +
+  geom_vline(xintercept = 20, color = "red", linetype = 2) +
+  scale_y_log10() +
+  annotation_logticks(sides = "l") +
+  labs(x = "Transcript quality value (qv)", y = "count")
+
+# Fraction below Q20
+mean(tx$qv < 20)
+
+# Lowest-confidence real genes (drop control features by their name prefixes)
+tx |>
+  filter(!str_detect(feature_name,
+                     "^(NegControl|UnassignedCodeword|BLANK|antisense|DeprecatedCodeword)")) |>
+  group_by(feature_name) |>
+  summarise(mean_qv = mean(qv), n = n(), .groups = "drop") |>
+  arrange(mean_qv) |>
+  head(10)
+```
+
+:::
+
+
+
+
+## Cell area
+
+Segmentation produces a polygon for each cell and (where detected) its nucleus. The areas of these polygons are among the most informative QC features in imaging-based ST: implausibly small cells are usually fragments from over-segmentation, while very large ones may be merged neighbours.
+
+```{r}
+plotColDataHistogram(sfe, c("cell_area", "nucleus_area"), scales = "free_y")
+```
+
+Spatial maps of cell and nucleus area highlight whether size anomalies are localized (a poorly segmented region) or spread throughout.
+
+```{r}
+#| fig-width: 10
+#| fig-height: 6
+
+p1 = plotSpatialFeature(sfe, "cell_area", colGeometryName = "cellSeg", show_axes = TRUE)
+p2 = plotSpatialFeature(sfe, "nucleus_area", colGeometryName = "nucSeg",show_axes = TRUE)
+
+p1 | p2 
+```
+
+It is always worth *zooming in* on the raw geometry to sanity-check the segmentation visually. Here we overlay cell and nucleus boundaries within a smaller bounding box.
+
+```{r}
+bbox3 <-  c(
+  xmin = 3200,
+  xmax = 3700,
+  ymin = 3500,
+  ymax = 3900
+)
+plotGeometry(sfe, colGeometryName = c("cellSeg", "nucSeg"), fill = FALSE, 
+             dark = TRUE, image_id = NULL, bbox = bbox3)
+
+```
+
+The nucleus-to-cell ratio (`prop_nuc`) is a compact segmentation-quality summary. Values near 1 mean the "cell" is essentially just its nucleus (failed cytoplasm segmentation); very low values can indicate over-extended cell boundaries.
+
+```{r}
+colData(sfe)$prop_nuc <- sfe$nucleus_area / sfe$cell_area
+plotColDataHistogram(sfe, "prop_nuc")
+plotSpatialFeature(sfe, "prop_nuc", colGeometryName = "cellSeg")
+```
+
+A pairwise matrix of all the cell-level QC metrics lets us spot correlations and joint outliers at a glance — e.g. the expected positive relationship between area and counts, and any cells that violate it.
+
+```{r}
+#| fig-width: 9
+#| fig-height: 8
+cols_use <- c("nCounts", "nGenes", "cell_area", "nucleus_area", "prop_nuc")
+df <- colData(sfe)[,cols_use] |> as.data.frame()
+
+ggplot(df) +
+    geom_bin2d(aes(x = .panel_x, y = .panel_y), bins = 30) +
+    geom_autodensity(fill = "gray90", color = "gray70", linewidth = 0.2) +
+    facet_matrix(vars(tidyselect::everything()), layer.diag = 2) +
+    scale_fill_distiller(palette = "Blues", direction = 1) + 
+  theme(axis.text.x = element_text(size = 8))
+```
+
+Some segmented cells have **no detected nucleus**. Depending on the tissue these can be genuine (anucleate fragments, sectioning artifacts) or spurious. We flag them and check how they relate to cell area.
+
+```{r}
+sfe$has_nuclei <- !is.na(sfe$nucleus_area)
+plotColData(sfe, y = "has_nuclei", x = "cell_area", 
+            point_fun = function(...) list())
+```
+
+```{r}
+plotSpatialFeature(sfe, "has_nuclei", colGeometryName = "cellSeg",
+                   show_axes = TRUE) +
+    # To highlight the cells that don't have nuclei
+    geom_sf(data = SpatialFeatureExperiment::centroids(sfe)[!sfe$has_nuclei,], 
+            color = "orange", size = 0.3)
+```
+```{r}
+bbox_custom <- c(xmin = 3700, xmax = 3900, ymin = 4400, ymax = 4600)
+plotGeometry(sfe, colGeometryName = c("cellSeg", "nucSeg"), fill = FALSE, 
+             dark = TRUE, image_id = NULL, show_axes = TRUE,bbox = bbox_custom)
+```
+
+
+Finally, the joint distribution of counts and cell area on a log scale. 
+
+```{r}
+plotColDataHistogram(sfe, c("nCounts", "cell_area")) +
+    scale_x_log10() +
+    annotation_logticks(sides = "b")
+```
+::: callout-important
+## Exercise 4
+
+In the count-vs-area pairwise panel, counts and cell area were positively related. Investigate the cells that **break** this relationship: very high counts in a small area (candidate doublets / contamination) versus large areas with few counts (candidate merged or empty segments). Flag the high-density outliers and check where they sit in the tissue.
+
+:::
+
+:::{.callout-tip collapse="true"}
+### Answer
+
+Counts-per-area summarises the relationship in a single value; we then flag the upper tail with a MAD-based outlier rule (`scuttle::isOutlier`) and map it. Spatial clustering of these outliers would suggest a segmentation artifact rather than genuine dense cell types.
+
+```{r}
+df <- colData(sfe) |> as.data.frame()
+df$counts_per_area <- df$nCounts / df$cell_area
+
+# Joint distribution
+ggplot(df, aes(cell_area, nCounts)) +
+  geom_bin2d(bins = 80) +
+  scale_fill_distiller(palette = "Blues", direction = 1) +
+  scale_x_log10() + scale_y_log10() +
+  annotation_logticks() +
+  labs(x = "cell area", y = "nCounts")
+
+
+ggplot(df,aes(x = counts_per_area)) + geom_density()
+
+# Flag the dense upper tail (potential doublets / contamination)
+sfe$dense_outlier <- df$counts_per_area > 3.5
+table(sfe$dense_outlier)
+
+plotSpatialFeature(sfe, "dense_outlier", colGeometryName = "cellSeg",
+                   show_axes = TRUE)
+```
+
+
+:::
+
+
+
+## Spatial outlier detection
+
+Cells sitting far from their neighbours are typically debris, edge fragments, or detections outside the main tissue. We use a *k*-nearest-neighbour graph on the centroids and look at the maximum and minimum neighbour distances per cell.
+
+```{r}
+g <- findKNN(spatialCoords(sfe)[,1:2], k = 5, BNPARAM = AnnoyParam())
+
+
+max_dist <- rowMaxs(g$distance)
+data.frame(max_dist = max_dist) |> 
+    ggplot(aes(max_dist)) +
+    geom_histogram(bins = 100) +
+    scale_y_continuous(transform = "log1p") +
+    scale_x_continuous(breaks = breaks_pretty()) +
+    annotation_logticks(sides = "l")
+
+
+min_dist <- rowMins(g$distance)
+data.frame(min_dist = min_dist) |> 
+    ggplot(aes(min_dist)) +
+    geom_histogram(bins = 100) +
+    scale_y_continuous(transform = "log1p") +
+    scale_x_continuous(breaks = breaks_pretty()) +
+    annotation_logticks(sides = "l")
+```
+
+Cells with neighbours too far away (`max_dist > 50`) or that are oddly isolated (`min_dist > 30`) are excluded from the `main_tissue` set. The thresholds are dataset-specific — read them off the histograms above.
+
+```{r}
+sfe$main_tissue <- !(max_dist > 50 | min_dist > 30)
+plotSpatialFeature(sfe, "main_tissue", colGeometryName = "cellSeg",
+                   show_axes = TRUE) +
+    # To highlight the outliers
+    geom_sf(data = SpatialFeatureExperiment::centroids(sfe)[!sfe$main_tissue,], 
+            color = "orange", size = 0.3)
+```
+
+
+
+## Genes
+
+So far QC has been per-cell; we should also ask which genes are reliable. The cleanest diagnostic compares each feature's mean and variance against the negative controls.
+
+```{r}
+rowData(sfe)$means <- rowMeans(counts(sfe))
+rowData(sfe)$vars <- rowVars(counts(sfe))
+```
+
+Real targets should have a clearly higher mean expression than the negative controls; any gene whose mean sits within the negative-control range is essentially indistinguishable from background.
+
+```{r}
+rowData(sfe)$is_neg <- rowData(sfe)$Type != "Gene Expression"
+plotRowData(sfe, x = "means", y = "is_neg") +
+    scale_y_log10() +
+    annotation_logticks(sides = "b")
+```
+
+The mean–variance plot is the key panel. Under pure technical (Poisson) noise, variance equals the mean and points fall on the red `y = x` line. Negative controls should hug that line, while real genes carrying biological signal are overdispersed and sit above it.
+
+```{r}
+plotRowData(sfe, x="means", y="vars", color_by = "is_neg") +
+    geom_abline(slope = 1, intercept = 0, color = "red") +
+    scale_x_log10() + scale_y_log10() +
+    annotation_logticks() +
+    coord_equal() +
+    labs(color = "Negative control")
+```
+
+
+
+## Filtering 
+
+Everything above has only computed QC metrics — the object has not actually been filtered yet. Decide on a set of thresholds (background %, minimum counts/genes, nucleus presence, main-tissue membership), report how many cells each criterion removes, and apply the combined filter to subset `sfe`.
+
+
+Reporting the cells passing each criterion *individually* and then *jointly* shows where most of the filtering happens.
+
+```{r}
+qc_keep <- sfe$subsets_any_neg_percent < 5 &  # low background
+           sfe$nCounts >= 10 &                # enough real signal
+           sfe$nGenes  >= 5  &                # enough detected genes
+           sfe$has_nuclei &                   # nucleus was segmented
+           sfe$main_tissue                    # not an isolated/edge cell
+
+# How many cells pass each criterion on its own vs. all combined?
+data.frame(
+  criterion = c("neg % < 5", "nCounts >= 10", "nGenes >= 5",
+                "has_nuclei", "main_tissue", "ALL combined"),
+  cells_passing = c(sum(sfe$subsets_any_neg_percent < 5,na.rm = TRUE),
+                    sum(sfe$nCounts >= 10),
+                    sum(sfe$nGenes  >= 5),
+                    sum(sfe$has_nuclei),
+                    sum(sfe$main_tissue),
+                    sum(qc_keep)),
+  pct = round(100 * c(sum(sfe$subsets_any_neg_percent < 5,na.rm = TRUE),
+                      sum(sfe$nCounts >= 10),
+                      sum(sfe$nGenes  >= 5),
+                      sum(sfe$has_nuclei),
+                      sum(sfe$main_tissue),
+                      sum(qc_keep)) / ncol(sfe), 1)
+)
+
+# Subset the object — note SFE keeps all geometries in sync automatically
+sfe.f <- sfe[, qc_keep]
+sfe.f
+```
+
+
+## Save the object
+
+Save the filtered `SpatialFeatureExperiment` object for the next steps. Run this after applying your filter in Exercise 3 so that the object on disk matches the QC decisions you made:
+
+```{r}
+alabaster.sfe::saveObject(sfe.f, here::here("results/day1/01.2b_sfe_xenium_QC"))
+
+```
+
+Clear your environment:
+```{r}
+#| eval: false
+rm(list = ls())
+gc()
+.rs.restartR()
+```
+
+:::{.callout-important}
+**Key Takeaways:**
+
+- Imaging-based ST QC is calibrated by **negative controls** (probe, codeword, unassigned), which separately estimate hybridisation background and decoding error.
+- **Panel-normalised** counts make metrics comparable across datasets profiled with different gene panels.
+- **Segmentation** is inferred and must be QC'd directly: cell/nucleus area, the nucleus-to-cell ratio, missing nuclei, and visual inspection of the raw polygons.
+- Always check QC metrics on tissue — uniform noise is expected; spatial clustering of bad cells signals a localized technical artifact.
+- The **mean–variance** plot relative to negative controls separates informative genes from those indistinguishable from background.
+
+:::
+
+
