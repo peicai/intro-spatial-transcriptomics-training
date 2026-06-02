@@ -16,7 +16,7 @@ In this section we will focus on feature selection and dimensionality reduction 
 
 By the end of this exercise, you will be able to:
 
--   Perform feature selection to identify highly variable genes (HVGs).
+-   Perform feature selection to identify highly variable genes (HVGs) and spatially variable genes (SVGs).
 -   Apply dimensionality reduction techniques like PCA.
 -   Visualize the results of dimensionality reduction in both reduced dimension space and spatial context.
 
@@ -28,6 +28,8 @@ By the end of this exercise, you will be able to:
 #| output: false
 
 library(SpatialExperiment)
+library(SpatialFeatureExperiment)
+library(Voyager)
 library(scran) 
 library(scater) 
 library(ggplot2)
@@ -36,33 +38,39 @@ library(bluster)
 library(escheR) 
 library(pheatmap)
 library(HDF5Array) 
+library(alabaster.sfe)
 library(ggspavis)
 library(nnSVG)
 library(Banksy)
 library(igraph)
 ```
 
-## Load SpatialExperiment Object
+## Load SpatialFeatureExperiment object
 
-We will start by loading the normalized `SpatialExperiment` object from the previous exercise, which contains filtered bins and genes with more than 1 count across all retained bins.
+We will start by loading the normalized Visium HD dataset stored in the `SpatialFeatureExperiment` object generated in the previous exercise. It contains filtered cells, and genes with at least 1 count across all retained cells.
 
 ```{r}
-# Load the normalized SpatialExperiment object.
-spe <- loadHDF5SummarizedExperiment(dir="results/day2", prefix="02.1_spe_")
+# Reload the SpatialFeatureExperiment object if not in the R session already
+sfe <- readObject("results/day2/02.1_sfe/")
+sfe
 ```
+
+*NOTE*: Feel free to use the normalized Xenium dataset, and compare your results to the others.
 
 ## Feature Selection
 
 ### Highly Variable Genes (HVGs)
 
-Similar to scRNA-seq analysis, feature selection is a crucial step to focus on genes that show significant biological variation across spots, and thus increase the signal to noise ratio. We typically aim at focusing on "Highly Variable Genes" (HVGs) as these are more likely to distinguish different cell types or spatial domains.
+Similar to scRNA-seq analysis, feature selection is a crucial step to focus on genes that are most likely to show significant biological variation across cells, and thus increase the signal to noise ratio. We typically aim at focusing on "Highly Variable Genes" (HVGs) as these are more likely to distinguish different cell types or spatial domains.
 
-In order to identify HVGs, we will first model the gene variance using a Poisson noise model with `scran::modelGeneVarByPoisson()`
+In order to identify HVGs, we will first model the gene variance using a Poisson-noise model with `scran::modelGeneVarByPoisson()`
+
+*NOTE*: this function will soon be deprecated in favor of the faster `scrapper::chooseRnaHvgs.se()`
 
 ```{r}
 # Model gene variance to identify highly variable genes.
 # This function fits a mean-variance trend to the log-normalized counts.
-dec <- modelGeneVarByPoisson(spe)
+dec <- modelGeneVarByPoisson(sfe)
 ## Sort by biological variance
 dec <- dec[order(dec$bio, decreasing = T), ]
 
@@ -77,7 +85,7 @@ curve(metadata(dec)$trend(x), add = TRUE, col = "dodgerblue", lwd = 2)
 ```
 
 ::: callout-important
-## Exercise 1
+#### Exercise 1
 How do you interpret this plot, compared to similar ones generated from scRNA-seq datasets?
 :::
 
@@ -85,78 +93,94 @@ Once we have modeled the gene variance, we can proceed to select the top HVGs.
 For demonstration purposes, we will visualize the expression patterns of the top 6 HVGs on the tissue slide. We exclude the mitochondrial genes, since those genes tend to be highly variable but do not provide much information about cell types or spatial domains.
 
 ```{r}
-# identify mitochondrial genes
-is.mito <- rownames(spe)[grepl("^MT-", rownames(spe))]
-
 # Top 6 HVGs
-top_HVG <- row.names(dec[!row.names(dec) %in% is.mito, ])[1:6]
+top_HVG <- row.names(dec)[1:6]
 top_HVG
 
-# Create a plot for each gene in top_HVG
-ps <- lapply(top_HVG, \(.) {
-    plotCoords(spe, 
-        annotate = ., 
-        assay_name = "logcounts") }) # use "logcounts" assay to visualise log normalised counts
-
-# figure arrangement and change colors
-patchwork::wrap_plots(ps, nrow = 2) & 
-  theme(legend.key.width = unit(0.4, "lines"), 
-        legend.key.height = unit(0.8, "lines")) & 
-  scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+# Create a plot to visualize the logcounts expression for each gene in top_HVG
+plotSpatialFeature(sfe, features = top_HVG) 
 ```
 
 ::: callout-important
-## Exercise 2
+#### Exercise 2
 How would you define the spatial expression patterns of these genes? Look a bit for some information on these genes (e.g., on the Uniprot website) to get a hint at which cell types and domains they could highlight.
 :::
 
-For downstream analysis, we define a larger group of HVG and add the information of whether a genes is in the HVG list or not in a `rowData` slot:
+For downstream analysis, we use the defined larger group of HVG, see the list in the `rowData` slot:
 
 ```{r}
 # Select the top 1000 highly variable genes.
 hvg <- getTopHVGs(dec, n = 1000) 
 
 # Store HVG information in rowData
-rowData(spe)$hvg <- rowData(spe)$Symbol %in% hvg
+rowData(sfe)$hvg <- rowData(sfe)$Symbol %in% hvg
 
 # Display the range of biological variation for the selected HVGs
-dec[hvg, ]$bio |> summary()
-
-# Have a look a the new column added
-rowData(spe)
+dec[rownames(sfe)[rowData(sfe)$hvg], ]$bio |> summary()
 ```
 
 ### Spatially Variable Genes (SVGs)
 
-We will go very quickly over this topic, which will be discussed in depth tomorrow. Today, the idea is to get an intuition about the difference between HVGs and SVGs. For this, we select randomly 6 other HVGs from the list, and plot their expression:
+Here, the idea is to get an intuition about the difference between HVGs and SVGs. For this, we first select randomly 6 other HVGs from the list, and plot their expression:
 
 ```{r}
 # Select randomly 6 HVGs
 set.seed(123)
-random_HVG <- sample(hvg, size = 6)
+random_HVG <- sample(row.names(sfe)[rowData(sfe)$hvg], size = 6)
 
-# Create a plot for each gene in top_HVG
-ps <- lapply(random_HVG, \(.) {
-    plotCoords(spe, 
-        annotate = ., 
-        assay_name = "logcounts") }) # use "logcounts" assay to visualise log normalised counts
-
-# figure arrangement and change colors
-patchwork::wrap_plots(ps, nrow = 2) & 
-  theme(legend.key.width = unit(0.4, "lines"), 
-        legend.key.height = unit(0.8, "lines")) & 
-  scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+# Create a plot for each gene in random_HVG
+plotSpatialFeature(sfe, features = random_HVG) 
 ```
 
 ::: callout-important
-## Exercise 3
-How would you define the spatial expression patterns of these genes? What is the difference with genes at the top of the list? Which ones would you qualify as SVGs?
+#### Exercise 3
+How would you define the spatial expression patterns of these genes in comparison to the `top_HVG` list? Which ones would you qualify as SVGs?
 :::
+
+#### Bonus: SVG detection with nnSVG
+
+`nnSVG` detects SVGs by modeling spatial gene expression using Gaussian processes, capturing smooth gradients or spatial trends. 
+
+*NOTE*: `nnSVG` is quite slow to run, so we will launch it only on the top HVGs. While it is running, take a look at the [nnSVG paper](https://www.nature.com/articles/s41467-023-39748-z) and the [package vignette](https://bioconductor.org/packages/devel/bioc/vignettes/nnSVG/inst/doc/nnSVG.html) to better understand how the method works, including its handling of covariates and multiple samples.
+
+We will launch it on a small subset of the HVGs 
+```{r day2-2-svg-feature-set-signatures-4}
+set.seed(123)
+random_HVG <- sample(row.names(sfe)[rowData(sfe)$hvg], size = 20)
+
+sub <- sfe[random_HVG, ]
+set.seed(123)
+sub <- nnSVG(sub) 
+```
+
+<!-- 
+This took 4 minutes to run on my laptop 
+-->
+
+::: callout-important
+#### Exercise 3b
+Inspect the nnSVG output stored in `rowData(sub)`. 
+
+- What do the result columns represent? 
+- Select the top SVGs detected by `nnSVG`, what do you notice? Are all HVGs also SVGs?
+:::
+
+::: {.callout-tip collapse="true"}
+#### Answer
+```{r day2-2-svg-feature-set-signatures-5}
+# Select top SVGs
+res_nnSVG <- rowData(sub) 
+res_nnSVG <- res_nnSVG[order(res_nnSVG$pval), ]
+head(res_nnSVG)
+top_nnSVG <- res_nnSVG$Symbol[seq_len(6)]
+```
+
+The main output is in `rowData` of the `SpatialExperiment` object, which includes: the likelihood ratio statistic (`LR_stat`), the gene’s rank based on this statistic (`rank`), raw p-values from a chi-squared test with 2 degrees of freedom (`pval`), p-values adjusted for multiple testing (`padj`), and the estimated effect size (`prop_sv`), defined as the proportion of spatial variance relative to total variance.
 
 ## Dimensionality Reduction (DR)
 Thereafter we make use of the highly variable genes (HVGs) to perform dimensionality reduction and clustering.
 
-### Non-spatially aware DR:
+### Non-spatially aware DR
 
 #### PCA
 
@@ -164,25 +188,33 @@ We can perform dimensionality reduction using Principal Component Analysis (PCA)
 
 ```{r}
 # Run PCA on the log-normalized counts of the HVGs
-spe <- runPCA(spe, ncomponents = 30, subset_row = rowData(spe)$hvg)
+sfe <- runPCA(sfe, ncomponents = 30, subset_row = rowData(sfe)$hvg)
 
 # Visualize the explained variance by each principal component.
 # This helps in determining how many PCs capture most of the variance.
-plot(attr(reducedDim(spe, "PCA"), "percentVar"),
+plot(attr(reducedDim(sfe, "PCA"), "percentVar"),
   xlab = "PC", ylab = "Proportion of variance explained",
   main = "PCA Scree Plot"
 )
 ```
 
+<!--
+```{r}
+library(Voyager)
+ElbowPlot(sfe)
+plotDimLoadings(sfe)
+```
+-->
+
 ::: callout-important
-## Exercise 4
+#### Exercise 4
 Based on the scree plot, how many principal components would you consider for downstream analysis? Why? 
 
 Bonus: You can also have look at the `scran::getDenoisedPCs` function to help you make this choice.
 :::
 
 ::: {.callout-tip collapse="true"}
-### Answer
+#### Answer
 We can select the first 10 PCs for downstream analysis, as they seem to capture a significant proportion of the variance in the data before the explained variance starts to level off.
 :::
 
@@ -190,46 +222,34 @@ Choose the number of PCs accordingly for downstream analysis. Visualize the PCs 
 
 ```{r}
 # Run PCA on the log-normalized counts of the HVGs using the top PCs, for example 10 PCs
-spe <- runPCA(spe, ncomponents = 10, subset_row = rowData(spe)$hvg)
+sfe <- runPCA(sfe, ncomponents = 10, subset_row = rowData(sfe)$hvg)
 
-# Get the PCA results 
-pcs <- reducedDim(spe, "PCA")
-# Visualize PCs on the tissue slice coordinates
-ps <- lapply(colnames(pcs), \(.) {
-    spe[[.]] <- pcs[, .]
-    plotCoords(spe, annotate = .)
-}) 
-# Arrange the plots and customize colors
-patchwork::wrap_plots(ps, nrow = 2) & 
-  theme(legend.key.width = unit(0.4, "lines"), 
-        legend.key.height = unit(0.8, "lines")) & 
-  scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+# Plot each principal component
+spatialReducedDim(sfe, "PCA", 10, colGeometryName = "cellSeg", 
+                  scattermore = TRUE, divergent = TRUE, diverge_center = 0)
 
 ```
 
 ::: callout-important
-## Exercise 5
+#### Exercise 5
 What do you notice? How do you interpret it?
 
-## Bonus Exercise
+#### Bonus Exercise
 Extract the genes most associated with one of these PCs
 :::
 
 ::: {.callout-tip collapse="true"}
-### Answer
+#### Answer
 
-We observe a strong correlation between the PCs scores and the expression patterns observed above for the top HVGs, suggesting that they refelct cell type or domain biology.
+We observe a strong correlation between the PCs scores and the expression patterns observed above for the top HVGs, suggesting that they reflect cell type or domain biology.
 
 To extract the 10 genes most associated to PC2: 
 ```{r}
-attributes(reducedDims(spe)[["PCA"]])$rotation[, "PC2"] |> abs() |> sort(decreasing = TRUE) |> names() |> head(n=10)
-
+attributes(reducedDims(sfe)[["PCA"]])$rotation[, "PC2"] |> abs() |> sort(decreasing = TRUE) |> names() |> head(n=10)
 ```
 :::
 
-### Spatially aware DR:
-
-#### Banksy
+### Spatially aware DR with Banksy
 
 We can also perform spatially aware dimensionality reduction using the `Banksy` method, which integrates spatial coordinates and gene expression into the PCA framework. This allows us to capture spatial patterns in the data while reducing dimensionality. 
 
@@ -242,7 +262,7 @@ xy <- c("array_row", "array_col")  # spatial coordinate names
 
 # compute spatially aware 'Banksy' PCs, using the HVGs only
 set.seed(112358)
-tmp <- computeBanksy(spe[rowData(spe)$hvg, ], 
+tmp <- computeBanksy(sfe[rowData(sfe)$hvg, ], 
                      assay_name=a, 
                      coord_names=xy, 
                      k_geom=k, 
@@ -251,25 +271,25 @@ tmp <- computeBanksy(spe[rowData(spe)$hvg, ],
 tmp <- runBanksyPCA(tmp, 
                     lambda=l, 
                     npcs=10)
-reducedDim(spe, "PCA_banksy") <- reducedDim(tmp, "PCA_M0_lam0.8") # store 'Banksy' PCs in original object
+reducedDim(sfe, "PCA_banksy") <- reducedDim(tmp, "PCA_M0_lam0.8") # transfer 'Banksy' PCs to original object
 ```
 
 ::: callout-important
-## Exercise 6
+#### Exercise 6
 While this is running, have a look at the [Banksy paper](https://www.nature.com/articles/s41588-024-01664-3) to understand better what the method is doing.
 
-Have a look at the spe object to see the dimensionality reduction slots. How many dimensionality reductions are stored now? What are their names and what do they represent?
+Have a look at the `sfe` object to see the dimensionality reduction slots. How many dimensionality reductions are stored now? What are their names and what do they represent?
 :::
 
 ::: {.callout-tip collapse="true"}
-### Answer
+#### Answer
 
 ```{r}
-spe
-reducedDimNames(spe)
+sfe
+reducedDimNames(sfe)
 ```
 
-There are now three dimensionality reductions stored in the `spe` object: :"PCA_artifacts", "PCA" and "PCA_banksy". "PCA_artifacts" was computed to capture technical artifacts in a previous exercise (QC step).
+There are now three dimensionality reductions stored in the `sfe` object: :`PCA_artifacts` (computed to capture technical artifacts in day2-1a exercise about QC), `PCA` calculated above, and the newly added `PCA_banksy`.
 
 "PCA" represents the non-spatially aware principal components, while "PCA_banksy" represents the spatially aware principal components computed using the Banksy method. Both methods have used HVGs for dimensionality reduction.
 :::
@@ -277,65 +297,55 @@ There are now three dimensionality reductions stored in the `spe` object: :"PCA_
 In the same way as before, we can visualise the Banksy PCs on the tissue slice coordinates.
 
 ::: callout-important
-## Exercise 7
+#### Exercise 7
 Select PCs from Banksy dimensionality reduction space and visualise them on the tissue slice. Do you observe any spatial patterns? How do they compare to the non-spatial PCs?
 :::
 
 ::: {.callout-tip collapse="true"}
-### Answer
+#### Answer
 
 ```{r}
 ## Visualize PCs on the tissue slice coordinates
-pcs <- reducedDim(spe, "PCA_banksy")
-ps <- lapply(colnames(pcs), \(.) {
-    spe[[.]] <- pcs[, .]
-    plotCoords(spe, annotate = .)
-}) 
-patchwork::wrap_plots(ps, nrow = 2) & 
-  theme(legend.key.width = unit(0.4, "lines"), 
-        legend.key.height = unit(0.8, "lines")) & 
-  scale_color_gradientn(colors = rev(hcl.colors(9, "Rocket")))
+spatialReducedDim(sfe, "PCA_banksy", 10, colGeometryName = "cellSeg", 
+                  scattermore = TRUE, divergent = TRUE, diverge_center = 0)
 ```
 :::
 
-
 ::: callout-important
-## Bonus Exercise
+#### Bonus Exercise
 Try to change Banksy parameters k and lambda. How does it affect the results?
 :::
 
 
-## Run UMAP
+### UMAP and comparison of non-spatially aware and spatially aware DR
 
-For visualization purposes only, we'll produce UMAPs based on on both spatially aware and not spatially aware PCA results:
+For visualization purposes only, we'll produce UMAPs based on both spatially aware and not spatially aware PCA results:
 
 ```{r}
 # UMAP
-spe <- runUMAP(spe, dimred="PCA", name="UMAP_tx")
-spe <- runUMAP(spe, dimred="PCA_banksy", name="UMAP_banksy")
+sfe <- runUMAP(sfe, dimred="PCA", name="UMAP")
+sfe <- runUMAP(sfe, dimred="PCA_banksy", name="UMAP_banksy")
 ```
 
 ```{r}
 # Visualise
-plotReducedDim(spe, dimred = "UMAP_tx", colour_by = "detected") + 
+plotReducedDim(sfe, dimred = "UMAP", colour_by = "detected") + 
   scale_colour_gradient(trans = "log", high = "yellow", low = "red")
 
-plotReducedDim(spe, dimred = "UMAP_banksy", colour_by = "detected") +
+plotReducedDim(sfe, dimred = "UMAP_banksy", colour_by = "detected") +
     scale_colour_gradient(trans = "log", high = "yellow", low = "red")
 
 ```
 
 ::: callout-important
-## Bonus question
+#### Bonus question
 If you tried different parameters for Banksy, how does it affect the UMAP results?
 :::
 
+<!-- TO DO: Identify potential pitfalls of segmentation (contamination, “bleeding” effect)? -->
 
 ## Save data for later
 
 ```{r}
-spe_HVG <- spe
-saveHDF5SummarizedExperiment(spe_HVG, dir="results/day2", prefix="01.3_spe_", replace=TRUE,
-                                chunkdim=NULL, level=NULL, as.sparse=NA,
-                                verbose=NA)
+alabaster.sfe::saveObject(sfe, "results/day2/02.2_sfe")
 ```
