@@ -36,9 +36,11 @@ library(HDF5Array)
 
 ## Input data
 
-Next, will work with the **Xenium** dataset from the P2 sample (human colorectal cancer study by [Oliveira _et al_](https://www.nature.com/articles/s41588-025-02193-3)). 
+Next, will work with the **10X Xenium** dataset from the P2 sample (human colorectal cancer study by [Oliveira _et al_](https://www.nature.com/articles/s41588-025-02193-3)). 
 
 This slide is a serial section of the sample used in `Exercise 1A`, so the two datasets are biologically related but not the exact same physical tissue section. 
+
+Imaging-based spatial transcriptomics platforms detect a **targeted panel** of a few hundred to a few thousand genes *in situ* at subcellular resolution, decoding each transcript over multiple rounds of imaging and assigning it to a segmented cell.
 
 The full Xenium output is very large and includes cell boundaries, nucleus boundaries, transcript locations, morphology images, and expression matrices. For this exercise, for practical reasons we use a region of interest, selected to **approximately match the region of interest used in `Exercise 1A`**, and only include some of the layers in the imported compact course folder. This makes the two exercises comparable while avoiding a full image-registration workflow during the practical (but see [this section from the OSTA book](https://lmweber.org/OSTA/pages/crs-workflow-xenvis.html#alignment) for some info on this process)
 
