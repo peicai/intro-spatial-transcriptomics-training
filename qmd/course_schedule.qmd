@@ -44,7 +44,7 @@ title: "Course schedule"
 | recap | 9:00 | 9:15 | Recap from day 2 | Joana Carlevaro-Fita | \- |  |  |
 | block 1 | 9:15 | 10:15 | Spatial statistics | Mark Robinson | not assigned yet | [link](../assets/pdf/10_stats_methods.pdf) |  |
 | break | 10:15 | 10:45 | Coffee break |  | \- |  |  |
-| block 2 | 10:45 | 12:30 | Co-localization analysis | Martin Emons | not assigned yet | [link](../assets/pdf/11_spastat_lecture.pdf) | [Exercise 8](../day3/day3-1_spatial_stats.qmd) |
+| block 2 | 10:45 | 12:30 | Multi-scale analysis | Martin Emons, Samuel Gunz | not assigned yet | [link](../assets/pdf/11_spastat_lecture.pdf) | [Exercise 8](../day3/day3-1_spatial_stats.qmd) |
 | break | 12:30 | 13:30 | Lunch |  | \- |  |  |
 | block 3 | 1:30 | 3:00 | SVG and DSP for spatial data | Peiying Cai | not assigned yet | [link](../assets/pdf/12_svg_dsp.pdf) | [Exercise 9](../day3/day3-2_svg_feature_set_signatures.qmd), [Exercise 10](../day3/day3-3_differential_spatial_pattern.qmd) |
 | break | 3:00 | 3:30 | Coffee break |  | \- |  |  |
